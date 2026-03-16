@@ -1,6 +1,10 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+export default clerkMiddleware((auth, req) => {
+  if (req.nextUrl.pathname.startsWith('/api/whatsapp/webhook')) {
+    return;
+  }
+});
 
 export const config = {
   matcher: [

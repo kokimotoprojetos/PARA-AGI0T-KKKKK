@@ -6,6 +6,10 @@ const evolutionKey = process.env.EVOLUTION_API_KEY;
 const instanceName = process.env.EVOLUTION_INSTANCE_NAME || "AgenteCobrador";
 const openaiKey = process.env.OPENAI_API_KEY;
 
+export async function GET() {
+  return new NextResponse("Webhook do Agente de IA está online e aguardando POSTs da Evolution API.", { status: 200 });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
