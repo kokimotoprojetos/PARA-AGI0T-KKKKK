@@ -59,36 +59,49 @@ export async function POST(req: Request) {
       userMessage = msg.text; 
     } else if (data?.messageType === 'audioMessage' || msg?.audioMessage || msgData?.messageType === 'audioMessage') {
       console.log("Áudio v2 detectado...");
-      const messageKey = msgData?.key?.id || msgData?.id;
       
-      const mediaRes = await fetch(`${evolutionUrl}/instance/media/base64/${instanceName}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
-        body: JSON.stringify({ key: { id: messageKey } })
-      });
+      // Como o Webhook está configurado para enviar base64, o áudio já vem embutido!
+      let base64Audio = msg?.base64 || msgData?.base64;
+      
+      if (!base64Audio) {
+         console.log("Baixando áudio da API...");
+         const messageKey = msgData?.key || data?.key;
+         const mediaRes = await fetch(`${evolutionUrl}/message/downloadMedia/${instanceName}`, {
+           method: "POST",
+           headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
+           body: JSON.stringify({ message: { key: messageKey, message: msg } })
+         });
+         if (mediaRes.ok) {
+           const mediaData = await mediaRes.json();
+           base64Audio = mediaData.base64;
+         } else {
+             console.log("Erro ao baixar áudio da API", await mediaRes.text());
+         }
+      }
 
-      if (mediaRes.ok) {
-        const mediaData = await mediaRes.json();
-        const base64Audio = mediaData.base64;
-        if (base64Audio) {
-          const audioBuffer = Buffer.from(base64Audio, 'base64');
-          const formData = new FormData();
-          const file = new Blob([audioBuffer], { type: 'audio/ogg' });
-          formData.append('file', file, 'audio.ogg');
-          formData.append('model', 'whisper-1');
+      if (base64Audio) {
+        console.log("Áudio em Base64 recebido! Enviando para a OpenAI Whisper...");
+        const audioBuffer = Buffer.from(base64Audio, 'base64');
+        const formData = new FormData();
+        const file = new Blob([audioBuffer], { type: 'audio/ogg' });
+        formData.append('file', file, 'audio.ogg');
+        formData.append('model', 'whisper-1');
 
-          const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${openaiKey}` },
-            body: formData
-          });
+        const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${openaiKey}` },
+          body: formData
+        });
 
-          if (whisperRes.ok) {
-            const whisperData = await whisperRes.json();
-            userMessage = whisperData.text;
-            console.log("Transcrição Whisper:", userMessage);
-          }
+        if (whisperRes.ok) {
+          const whisperData = await whisperRes.json();
+          userMessage = whisperData.text;
+          console.log("Transcrição Whisper concluída:", userMessage);
+        } else {
+          console.log("Erro na OpenAI Whisper:", await whisperRes.text());
         }
+      } else {
+         console.log("Falha ao obter base64 do áudio.");
       }
     }
 
