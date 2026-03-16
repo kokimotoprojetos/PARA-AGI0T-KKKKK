@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
+  const { userId } = auth();
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
   const { data, error } = await supabase
     .from('debts')
@@ -13,7 +12,7 @@ export async function GET() {
       *,
       debtor:debtors(*)
     `)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .order('due_date', { ascending: true });
 
   if (error) return new NextResponse(error.message, { status: 500 });
@@ -22,8 +21,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
+  const { userId } = auth();
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
   const { amount, dueDate, description, status, debtorId, debtTypeId } = await req.json();
 
@@ -38,7 +37,7 @@ export async function POST(req: Request) {
       status: status || 'PENDING',
       debtor_id: debtorId,
       debt_type_id: debtTypeId,
-      user_id: session.user.id
+      user_id: userId
     }])
     .select()
     .single();

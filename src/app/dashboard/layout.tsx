@@ -1,14 +1,15 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LogOut, Home, Users, CreditCard, MessageCircle, Settings, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UserButton } from "@clerk/nextjs";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions);
+  const { userId } = auth();
+  const user = await currentUser();
 
-  if (!session?.user) {
+  if (!userId) {
     redirect("/login");
   }
 
@@ -38,15 +39,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </Link>
         </nav>
         <div className="p-4 border-t border-slate-800 relative z-10">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-white">{session.user.name}</span>
-              <span className="text-xs text-slate-400 truncate max-w-[150px]">{session.user.email}</span>
+              <span className="text-sm font-semibold text-white truncate max-w-[120px]">
+                {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username || "Usuário"}
+              </span>
+              <span className="text-xs text-slate-400 truncate max-w-[120px]">
+                {user?.emailAddresses[0].emailAddress}
+              </span>
             </div>
+            <UserButton afterSignOutUrl="/" />
           </div>
-          <Link href="/api/auth/signout" className="flex items-center justify-center w-full py-2 text-sm text-red-500 bg-red-500/10 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition-colors font-medium">
-            <LogOut className="w-4 h-4 mr-2" /> Sair
-          </Link>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto bg-slate-950 p-6 lg:p-10 relative">

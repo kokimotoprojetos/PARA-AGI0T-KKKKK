@@ -1,25 +1,24 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, CreditCard, AlertCircle, CheckCircle } from "lucide-react";
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
+  const { userId } = auth();
   
-  if (!session?.user?.id) return null;
+  if (!userId) return null;
 
   // Buscar contagem de devedores
   const { count: debtorsCount } = await supabase
     .from('debtors')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', session.user.id);
+    .eq('user_id', userId);
 
   // Buscar últimas dívidas
   const { data: debts } = await supabase
     .from('debts')
     .select('*, debtor:debtors(name)')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(5);
 
