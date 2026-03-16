@@ -18,30 +18,36 @@ export async function POST(req: Request) {
     console.log("--- WEBHOOK EVOLUTION V2 RECEBIDO ---");
     console.log(JSON.stringify(body, null, 2));
 
-    // Na v2, o corpo costuma vir como: { event: "messages.upsert", data: { ... } }
-    // As mensagens ficam em data.message ou data (dependendo do evento selecionado)
-    const event = body.event;
-    const data = body.data;
+    // 1. Normalização Extrema do Corpo da Requisição
+    let payload = body;
+    if (Array.isArray(body)) {
+      payload = body[0];
+    }
+    
+    const data = payload?.data || payload;
+    // Tenta encontrar a mensagem onde quer que ela esteja na árvore do JSON
+    const msgData = data?.messages?.[0] || data?.message || data;
 
-    if (!data) {
-        console.log("Erro: Propriedade 'data' não encontrada no body.");
-        return NextResponse.json({ skipped: true, reason: "no_data" });
+    // Se a mensagem for "fromMe" (enviada pelo próprio bot), ignora
+    const fromMe = msgData?.key?.fromMe || msgData?.fromMe || data?.key?.fromMe;
+    if (fromMe) {
+        console.log("Pulo: Mensagem enviada por mim (fromMe).");
+        return NextResponse.json({ skipped: true, reason: "from_me" });
     }
 
-    // Identificar o JID do remetente (v2 format)
-    const remoteJid = data.key?.remoteJid || data.remoteJid;
+    const remoteJid = msgData?.key?.remoteJid || msgData?.remoteJid || data?.key?.remoteJid || data?.sender;
     
     if (!remoteJid) {
-      console.log("Erro: remoteJid não encontrado.");
+      console.log("Erro: remoteJid não encontrado. Estrutura recebida não possui remetente claro.");
       return NextResponse.json({ skipped: true, reason: "no_remote_jid" });
     }
 
     const cleanNumber = remoteJid.split('@')[0].replace(/\D/g, '');
-    console.log("Número Remetente (v2):", cleanNumber);
+    console.log("Número Remetente Detectado:", cleanNumber);
 
-    // Extrair Mensagem de Texto (v2 pode vir direto em data.message)
+    // Extrair Mensagem de Texto
     let userMessage = "";
-    const msg = data.message;
+    const msg = msgData?.message || msgData;
     
     if (msg?.conversation) {
       userMessage = msg.conversation;
@@ -49,9 +55,11 @@ export async function POST(req: Request) {
       userMessage = msg.extendedTextMessage.text;
     } else if (msg?.imageMessage?.caption) {
       userMessage = msg.imageMessage.caption;
-    } else if (body.data?.messageType === 'audioMessage' || msg?.audioMessage) {
+    } else if (msg?.text) {
+      userMessage = msg.text; // Formato alternativo
+    } else if (data?.messageType === 'audioMessage' || msg?.audioMessage) {
       console.log("Áudio v2 detectado...");
-      const messageKey = data.key?.id || data.id;
+      const messageKey = msgData?.key?.id || msgData?.id;
       
       const mediaRes = await fetch(`${evolutionUrl}/instance/media/base64/${instanceName}`, {
         method: "POST",
@@ -78,14 +86,14 @@ export async function POST(req: Request) {
           if (whisperRes.ok) {
             const whisperData = await whisperRes.json();
             userMessage = whisperData.text;
-            console.log("Transcrição v2 Whisper:", userMessage);
+            console.log("Transcrição Whisper:", userMessage);
           }
         }
       }
     }
 
     if (!userMessage) {
-      console.log("Pulo: Mensagem vazia ou tipo não mapeado na v2.");
+      console.log("Pulo: Mensagem vazia ou tipo não mapeado (possível evento de status).");
       return NextResponse.json({ skipped: true, reason: "empty_or_unsupported" });
     }
 
