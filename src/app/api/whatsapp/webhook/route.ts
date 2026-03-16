@@ -149,6 +149,9 @@ export async function POST(req: Request) {
     - Devedores: ${debtors.length}
     - Pendente: R$ ${pendingAmount.toFixed(2)}
     - Recebido: R$ ${paidAmount.toFixed(2)}
+    
+    LISTA DETALHADA DE DÍVIDAS PENDENTES:
+    ${pendingDebts.map(d => `- Nome: ${d.debtor?.name}\n  Valor: R$ ${Number(d.amount).toFixed(2)}\n  Vencimento: ${new Date(d.due_date).toLocaleDateString('pt-BR')}\n  Descrição: ${d.description || 'Sem descrição'}`).join('\n')}
     `;
 
     // Resposta com OpenAI
@@ -158,7 +161,18 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "gpt-4o",
         messages: [
-          { role: "system", content: `Agente de IA do AgenteCobrador. Responda curto.\n\n${systemContext}` },
+          { 
+            role: "system", 
+            content: `Você é o Agente de IA do AgenteCobrador. Sua função é ajudar o administrador com informações financeiras.
+            
+            QUANDO O ADMIN PERGUNTAR "QUEM ESTÁ DEVENDO" OU PEDIR RELATÓRIOS:
+            - Forneça uma lista completa e organizada.
+            - Para cada devedor, apresente: Nome, Valor da Dívida e Data de Vencimento.
+            - Seja cordial mas direto. Use emojis para organizar a lista.
+            
+            DADOS DO PAINEL PARA CONSULTA:
+            ${systemContext}` 
+          },
           { role: "user", content: userMessage }
         ]
       })
