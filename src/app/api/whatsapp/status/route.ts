@@ -81,6 +81,7 @@ export async function POST() {
         headers: { "Content-Type": "application/json", "apikey": apikey as string },
         body: JSON.stringify({
             webhook: {
+                enabled: true,
                 url: webhookUrl,
                 byEvents: false,
                 base64: true,
@@ -103,7 +104,7 @@ export async function POST() {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": apikey as string },
         body: JSON.stringify({
-            reject_call: false,
+            rejectCall: false,
             msgCall: "",
             groupsIgnore: true,
             alwaysOnline: true,
