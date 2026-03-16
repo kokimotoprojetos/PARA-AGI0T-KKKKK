@@ -32,25 +32,41 @@ export async function POST(req: Request) {
 
     const userId = profile.id;
 
-    // Buscar dados do usuário para dar contexto à IA
-    const [debtorsRes, debtsRes] = await Promise.all([
+    // Buscar dados completos do usuário para dar contexto total à IA
+    const [debtorsRes, debtsRes, typesRes] = await Promise.all([
       supabase.from('debtors').select('*').eq('user_id', userId),
-      supabase.from('debts').select('*, debtor:debtors(name)').eq('user_id', userId)
+      supabase.from('debts').select('*, debtor:debtors(name), type:debt_types(name)').eq('user_id', userId),
+      supabase.from('debt_types').select('*').eq('user_id', userId)
     ]);
 
-    const debtorsCount = debtorsRes.data?.length || 0;
+    const debtors = debtorsRes.data || [];
     const debts = debtsRes.data || [];
+    const types = typesRes.data || [];
+
     const totalAmount = debts.reduce((sum, d) => sum + Number(d.amount), 0);
-    const pendingAmount = debts.filter(d => d.status !== 'PAID').reduce((sum, d) => sum + Number(d.amount), 0);
+    const pendingDebts = debts.filter(d => d.status === 'PENDING');
+    const pendingAmount = pendingDebts.reduce((sum, d) => sum + Number(d.amount), 0);
+    const paidAmount = debts.filter(d => d.status === 'PAID').reduce((sum, d) => sum + Number(d.amount), 0);
     
-    // Criar um resumo simplificado para o prompt
-    const contextData = {
-      total_devedores: debtorsCount,
-      total_geral_dividas: totalAmount,
-      total_pendente: pendingAmount,
-      lista_devedores: debtorsRes.data?.map(d => d.name).join(", "),
-      recentes: debts.slice(0, 5).map(d => `${d.debtor?.name}: R$ ${d.amount} (${d.status})`)
-    };
+    // Criar um resumo detalhado (Cérebro do Agente)
+    const systemContext = `
+    DADOS DO PAINEL FINANCEIRO:
+    - Total de Clientes (Devedores): ${debtors.length}
+    - Lista de Clientes: ${debtors.map(d => `${d.name} (${d.phone})`).join(", ")}
+    
+    - Resumo de Dívidas:
+      * Total histórico lançado: R$ ${totalAmount.toFixed(2)}
+      * Total já RECEBIDO: R$ ${paidAmount.toFixed(2)}
+      * Total PENDENTE (A receber): R$ ${pendingAmount.toFixed(2)}
+    
+    - Tipos de Cobrança configurados: ${types.map(t => t.name).join(", ")}
+    
+    - Detalhes das Dívidas Pendentes:
+      ${pendingDebts.map(d => `- ${d.debtor?.name}: R$ ${d.amount} (Vence em: ${new Date(d.due_date).toLocaleDateString('pt-BR')}) - ${d.description || 'Sem descrição'}`).join("\n      ")}
+    
+    - Últimos Registros (Histórico):
+      ${debts.slice(-10).map(d => `- ${d.debtor?.name}: R$ ${d.amount} [${d.status}]`).join("\n      ")}
+    `;
 
     // Chamar DeepSeek
     const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
@@ -66,16 +82,15 @@ export async function POST(req: Request) {
           { 
             role: "system", 
             content: `Você é o Agente Financeiro do sistema AgenteCobrador. 
-            Você ajuda o administrador a gerenciar suas cobranças. 
-            Aqui estão os dados atuais do banco de dados do usuário:
-            - Total de devedores: ${contextData.total_devedores}
-            - Total em dívidas (Geral): R$ ${contextData.total_geral_dividas}
-            - Total Pendente/Atrasado: R$ ${contextData.total_pendente}
-            - Devedores: ${contextData.lista_devedores}
-            - Últimas movimentações: ${contextData.recentes.join("; ")}
+            Você ajuda o administrador a gerenciar suas cobranças com precisão total. 
             
-            Responda de forma curta, direta e amigável. Use emojis. 
-            Se ele perguntar quem deve, liste os nomes. Se perguntar quanto tem a receber, diga o valor total pendente.` 
+            ${systemContext}
+            
+            INSTRUÇÕES:
+            1. Responda de forma curta, direta e amigável. Use emojis. 
+            2. Se perguntarem "quem deve", liste os nomes e valores pendentes.
+            3. Se perguntarem o total, informe o "Total PENDENTE".
+            4. Você tem acesso a todo o painel, então pode responder sobre devedores, valores, datas de vencimento e tipos de cobrança.` 
           },
           { role: "user", content: message }
         ],
