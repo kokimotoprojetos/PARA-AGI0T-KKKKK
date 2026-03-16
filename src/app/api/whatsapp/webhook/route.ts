@@ -113,7 +113,8 @@ export async function POST(req: Request) {
 
     if (!adminProfile) {
       console.log("BLOQUEIO v2: Número", cleanNumber, "não autorizado.");
-      return NextResponse.json({ skipped: true, reason: "not_admin" });
+      const registered = profiles?.map(p => p.notification_number) || [];
+      return NextResponse.json({ skipped: true, reason: "not_admin", received: cleanNumber, registeredInDB: registered });
     }
 
     const userId = adminProfile.id;
