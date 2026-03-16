@@ -55,7 +55,8 @@ export async function POST() {
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
   
     try {
-      const res = await fetch(`${evolutionUrl}/instance/create`, {
+      // 1. Criar a instância
+      const createRes = await fetch(`${evolutionUrl}/instance/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": apikey as string },
         body: JSON.stringify({
@@ -65,9 +66,62 @@ export async function POST() {
         })
       });
       
-      const data = await res.json();
-      return NextResponse.json(data);
+      const createData = await createRes.json();
+
+      // URL base do seu servidor (pega do host atual ou env)
+      // Como estamos no backend, usamos uma variável de ambiente ou um fallback hardcoded provisório
+      const webhookUrl = process.env.NEXT_PUBLIC_APP_URL ? 
+        `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook` : 
+        "https://debitai.vercel.app/api/whatsapp/webhook";
+
+      // 2. Configurar o Webhook automaticamente
+      console.log("Configurando Webhook Automático na Evolution API para:", webhookUrl);
+      const webhookRes = await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": apikey as string },
+        body: JSON.stringify({
+            webhook: {
+                url: webhookUrl,
+                byEvents: false,
+                base64: true,
+                events: [
+                    "MESSAGES_UPSERT",
+                    "MESSAGES_UPDATE"
+                ]
+            }
+        })
+      });
+
+      if (!webhookRes.ok) {
+        console.error("Erro ao configurar Webhook:", await webhookRes.text());
+      } else {
+        console.log("Webhook configurado com sucesso!");
+      }
+
+      // 3. Configurar Settings (Avisar quando houver nova mensagem, ler áudios, etc)
+      const settingsRes = await fetch(`${evolutionUrl}/settings/set/${instanceName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": apikey as string },
+        body: JSON.stringify({
+            reject_call: false,
+            msgCall: "",
+            groupsIgnore: true,
+            alwaysOnline: true,
+            readMessages: true,
+            readStatus: false,
+            syncFullHistory: false
+        })
+      });
+
+      if (!settingsRes.ok) {
+        console.error("Erro ao configurar Settings:", await settingsRes.text());
+      } else {
+        console.log("Settings configurados com sucesso!");
+      }
+
+      return NextResponse.json(createData);
     } catch (error: any) {
+      console.error("Erro ao criar instância/webhook:", error);
       return new NextResponse(error.message, { status: 500 });
     }
 }
