@@ -55,6 +55,32 @@ export async function POST(req: Request) {
       return new NextResponse(`Erro no banco de dados: ${error.message}`, { status: 500 });
     }
 
+    // Tentar enviar notificação para o número configurado
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('notification_number')
+        .eq('id', userId)
+        .single();
+      
+      if (profile?.notification_number) {
+        const evolutionUrl = process.env.EVOLUTION_API_URL;
+        const apikey = process.env.EVOLUTION_API_KEY;
+        const instanceName = process.env.EVOLUTION_INSTANCE_NAME || "AgenteCobrador";
+        
+        await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "apikey": apikey as string },
+          body: JSON.stringify({
+            number: profile.notification_number,
+            text: `📢 *Novo Devedor Cadastrado*\n\n👤 *Nome:* ${name}\n📱 *WhatsApp:* ${phone}\n📧 *Email:* ${email || 'Não informado'}\n\nO sistema agora monitora este cliente.`
+          }),
+        }).catch(e => console.error("Falha ao enviar alerta de admin:", e));
+      }
+    } catch (e) {
+      console.error("Erro ao processar notificação de admin:", e);
+    }
+
     return NextResponse.json(data);
   } catch (err: any) {
     console.error("Erro no processamento da requisição:", err);

@@ -65,8 +65,37 @@ export async function POST() {
         })
       });
       
-      return NextResponse.json(await res.json());
+      const data = await res.json();
+      return NextResponse.json(data);
     } catch (error: any) {
       return new NextResponse(error.message, { status: 500 });
     }
+}
+
+export async function DELETE() {
+  const { userId } = auth();
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+  try {
+    // Primeiro tentamos o logout, depois deletamos a instância
+    await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
+      method: "DELETE",
+      headers: { "apikey": apikey as string }
+    });
+
+    const res = await fetch(`${evolutionUrl}/instance/delete/${instanceName}`, {
+      method: "DELETE",
+      headers: { "apikey": apikey as string }
+    });
+
+    if (!res.ok) {
+        const errorData = await res.text();
+        throw new Error(`Erro ao deletar instância: ${errorData}`);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error(error);
+    return new NextResponse(error.message, { status: 500 });
+  }
 }
