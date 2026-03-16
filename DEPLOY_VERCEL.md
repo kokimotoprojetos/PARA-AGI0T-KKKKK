@@ -15,11 +15,11 @@ Você precisará de uma URL do PostgreSQL real (Exemplos grátis: **Neon.tech** 
 1. Acesse o [Vercel](https://vercel.com/) e faça login usando o GitHub.
 2. Clique no botão **"Add New..." -> "Project"**.
 3. Importe o repositório **`PARA-AGI0T-KKKKK`**.
-4. Em **"Root Directory"**, clique em **Edit** e selecione a pasta `frontend`.
+4. Verifique se o **"Framework Preset"** está como **Next.js**.
 5. Abra a sessão **Environment Variables (Variáveis de Ambiente)** e adicione todas as 4 chaves abaixo preenchidas:
    - `DATABASE_URL` ➡️ Cole aqui a URL do seu Banco Postgres (ex: Neon.tech).
-   - `NEXTAUTH_SECRET` ➡️ Crie uma chave de segurança aleatória (Pode ser qualquer texto grande ou UUID).
-   - `NEXTAUTH_URL` ➡️ Ao final do deploy, será sua URL na vercel (ex: `https://meu-projeto.vercel.app`).
+   - `NEXTAUTH_SECRET` ➡️ Crie uma chave de segurança aleatória.
+   - `NEXTAUTH_URL` ➡️ Sua URL na vercel (ex: `https://meu-projeto.vercel.app`).
    - `EVOLUTION_API_URL` ➡️ `https://evolutionapi-evolution-api.g8hvc9.easypanel.host`
    - `EVOLUTION_API_KEY` ➡️ `HX32784759LF2NPPO8PM`
 6. Clique em **Deploy**.
