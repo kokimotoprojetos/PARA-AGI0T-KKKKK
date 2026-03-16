@@ -56,8 +56,8 @@ export async function POST(req: Request) {
     } else if (msg?.imageMessage?.caption) {
       userMessage = msg.imageMessage.caption;
     } else if (msg?.text) {
-      userMessage = msg.text; // Formato alternativo
-    } else if (data?.messageType === 'audioMessage' || msg?.audioMessage) {
+      userMessage = msg.text; 
+    } else if (data?.messageType === 'audioMessage' || msg?.audioMessage || msgData?.messageType === 'audioMessage') {
       console.log("Áudio v2 detectado...");
       const messageKey = msgData?.key?.id || msgData?.id;
       
