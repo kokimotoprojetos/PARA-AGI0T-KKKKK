@@ -53,15 +53,19 @@ export default function DevedoresPage() {
         body: JSON.stringify(formData)
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || "Erro ao salvar devedor");
+      }
       
       toast.success(`Devedor ${isEditing ? 'atualizado' : 'adicionado'} com sucesso!`);
       setIsOpen(false);
       setFormData({ name: '', phone: '', email: '' });
       setEditingId(null);
       fetchDebtors();
-    } catch {
-      toast.error("Erro ao salvar devedor");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Erro ao salvar devedor");
     }
   };
 
@@ -92,11 +96,11 @@ export default function DevedoresPage() {
           <p className="text-slate-400">Gerencie sua carteira de clientes inadimplentes.</p>
         </div>
         <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) setEditingId(null); setFormData({name:'', phone:'', email:''}); }}>
-          <DialogTrigger asChild>
+          <DialogTrigger render={
             <Button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold shadow-lg shadow-emerald-500/20">
               <Plus className="w-4 h-4 mr-2" /> Novo Devedor
             </Button>
-          </DialogTrigger>
+          } />
           <DialogContent className="bg-slate-900 border-slate-800 text-white sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle className="text-xl">{editingId ? 'Editar Devedor' : 'Adicionar Novo Devedor'}</DialogTitle>

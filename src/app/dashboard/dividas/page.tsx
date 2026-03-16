@@ -150,11 +150,11 @@ export default function DividasPage() {
           <p className="text-slate-400">Controle o que você tem a receber e envie cobranças.</p>
         </div>
         <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) setEditingId(null); setFormData({amount:'', dueDate:'', description:'', status:'PENDING', debtorId:''}); }}>
-          <DialogTrigger asChild>
+          <DialogTrigger render={
             <Button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold shadow-lg shadow-emerald-500/20">
               <Plus className="w-4 h-4 mr-2" /> Nova Dívida
             </Button>
-          </DialogTrigger>
+          } />
           <DialogContent className="bg-slate-900 border-slate-800 text-white sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle className="text-xl">{editingId ? 'Editar Dívida' : 'Adicionar Nova Dívida'}</DialogTitle>

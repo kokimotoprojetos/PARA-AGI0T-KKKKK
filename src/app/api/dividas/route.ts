@@ -24,25 +24,36 @@ export async function POST(req: Request) {
   const { userId } = auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
-  const { amount, dueDate, description, status, debtorId, debtTypeId } = await req.json();
+    const body = await req.json();
+    const { amount, dueDate, description, status, debtorId, debtTypeId } = body;
 
-  if (!amount || !dueDate || !debtorId) return new NextResponse("Missing required fields", { status: 400 });
+    if (!amount || !dueDate || !debtorId) {
+      return new NextResponse("Campos obrigatórios ausentes (Valor, Vencimento ou Devedor)", { status: 400 });
+    }
 
-  const { data, error } = await supabase
-    .from('debts')
-    .insert([{
-      amount,
+    const insertData: any = {
+      amount: parseFloat(amount),
       due_date: dueDate,
-      description,
       status: status || 'PENDING',
       debtor_id: debtorId,
-      debt_type_id: debtTypeId,
       user_id: userId
-    }])
-    .select()
-    .single();
+    };
 
-  if (error) return new NextResponse(error.message, { status: 500 });
+    if (description) insertData.description = description;
+    if (debtTypeId) insertData.debt_type_id = debtTypeId;
 
-  return NextResponse.json(data);
+    console.log("Tentando lançar dívida:", insertData);
+
+    const { data, error } = await supabase
+      .from('debts')
+      .insert([insertData])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Erro Supabase (debts):", error);
+      return new NextResponse(`Erro no banco de dados: ${error.message}`, { status: 500 });
+    }
+
+    return NextResponse.json(data);
 }
