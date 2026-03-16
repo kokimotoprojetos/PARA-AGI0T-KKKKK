@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-const evolutionUrl = process.env.EVOLUTION_API_URL?.replace(/\/$/, ""); // Remove barra final se existir
+const evolutionUrl = process.env.EVOLUTION_API_URL?.replace(/\/$/, ""); 
 const evolutionKey = process.env.EVOLUTION_API_KEY;
 const instanceName = process.env.EVOLUTION_INSTANCE_NAME || "AgenteCobrador";
 const openaiKey = process.env.OPENAI_API_KEY;
@@ -18,9 +18,15 @@ export async function POST(req: Request) {
     console.log("--- WEBHOOK REQUISICAO ---");
     console.log(JSON.stringify(body, null, 2));
 
-    // A Evolution pode mandar a mensagem dentro de 'data' ou 'data.messages[0]'
-    const messageData = body.data?.messages?.[0] || body.data;
-    const remoteJid = messageData?.key?.remoteJid;
+    // A Evolution pode mandar como Object direto ou dentro de um Array
+    let messageData = null;
+    if (Array.isArray(body.data)) {
+        messageData = body.data[0];
+    } else {
+        messageData = body.data?.messages?.[0] || body.data;
+    }
+
+    const remoteJid = messageData?.key?.remoteJid || messageData?.remoteJid;
     
     if (!remoteJid) {
       console.log("Erro: remoteJid não encontrado no body.");
@@ -34,13 +40,16 @@ export async function POST(req: Request) {
     let userMessage = "";
     const msg = messageData.message;
     
+    // Verificações robustas de tipo de mensagem
     if (msg?.conversation) {
       userMessage = msg.conversation;
     } else if (msg?.extendedTextMessage?.text) {
       userMessage = msg.extendedTextMessage.text;
+    } else if (msg?.imageMessage?.caption) {
+      userMessage = msg.imageMessage.caption;
     } else if (messageData.messageType === 'audioMessage' || msg?.audioMessage) {
       console.log("Áudio detectado, iniciando transcrição...");
-      const messageKey = messageData.key.id;
+      const messageKey = messageData.key?.id || messageData.id;
       
       const mediaRes = await fetch(`${evolutionUrl}/instance/media/base64/${instanceName}`, {
         method: "POST",
@@ -78,8 +87,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ skipped: true, reason: "empty_message" });
     }
 
-    // VERIFICAÇÃO DE ADMIN (Mais flexível)
-    // Buscamos todos os perfis que tenham número de notificação e comparamos no código
+    // VERIFICAÇÃO DE ADMIN (NUCLEAR)
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, notification_number')
@@ -87,41 +95,40 @@ export async function POST(req: Request) {
 
     const adminProfile = profiles?.find(p => {
       const dbNum = p.notification_number?.replace(/\D/g, '');
-      // Compara se o final dos números coincide (evita erros de 55 ou 9 extra)
-      return dbNum && (cleanNumber.endsWith(dbNum) || dbNum.endsWith(cleanNumber));
+      if (!dbNum) return false;
+      // Compara se o final dos números coincide (últimos 8 dígitos para ser seguro)
+      const lastDigitsClean = cleanNumber.slice(-8);
+      const lastDigitsDb = dbNum.slice(-8);
+      return lastDigitsClean === lastDigitsDb;
     });
 
     if (!adminProfile) {
-      console.log("BLOQUEIO: Número", cleanNumber, "não corresponde ao admin no banco.");
+      console.log("BLOQUEIO: Número", cleanNumber, "não corresponde ao admin.");
       return NextResponse.json({ skipped: true, reason: "not_admin" });
     }
 
-    console.log("Admin validado! Consultando painel para o usuário:", adminProfile.id);
+    console.log("Admin validado! Consultando painel...");
     const userId = adminProfile.id;
 
     // Buscar Dados do Painel
-    const [debtorsRes, debtsRes, typesRes] = await Promise.all([
+    const [debtorsRes, debtsRes] = await Promise.all([
       supabase.from('debtors').select('*').eq('user_id', userId),
-      supabase.from('debts').select('*, debtor:debtors(name), type:debt_types(name)').eq('user_id', userId),
-      supabase.from('debt_types').select('*').eq('user_id', userId)
+      supabase.from('debts').select('*, debtor:debtors(name)').eq('user_id', userId),
     ]);
 
     const debtors = debtorsRes.data || [];
     const debts = debtsRes.data || [];
-    const types = typesRes.data || [];
-
-    const totalAmount = debts.reduce((sum, d) => sum + Number(d.amount), 0);
+    
     const pendingDebts = debts.filter(d => d.status === 'PENDING');
     const pendingAmount = pendingDebts.reduce((sum, d) => sum + Number(d.amount), 0);
     const paidAmount = debts.filter(d => d.status === 'PAID').reduce((sum, d) => sum + Number(d.amount), 0);
     
     const systemContext = `
-    DADOS DO PAINEL:
+    DADOS ATUAIS:
     - Devedores: ${debtors.length}
     - Total Pendente: R$ ${pendingAmount.toFixed(2)}
     - Total Recebido: R$ ${paidAmount.toFixed(2)}
-    - Lista: ${debtors.map(d => d.name).join(", ")}
-    - Dívidas Pendentes: ${pendingDebts.map(d => `${d.debtor?.name} (R$ ${d.amount})`).join("; ")}
+    - Devedores Recentes: ${debtors.slice(0, 5).map(d => d.name).join(", ")}
     `;
 
     // Chamar GPT-4o
@@ -131,27 +138,30 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "gpt-4o",
         messages: [
-          { role: "system", content: `Você é o Agente Financeiro do AgenteCobrador. Responda curto e com emojis.\n\n${systemContext}` },
+          { role: "system", content: `Aja como o Agente de IA do AgenteCobrador. Seja conciso.\n\n${systemContext}` },
           { role: "user", content: userMessage }
         ]
       })
     });
 
     const aiData = await aiResponse.json();
-    const replyText = aiData.choices?.[0]?.message?.content || "Desculpe, tive um erro ao processar sua resposta.";
+    const replyText = aiData.choices?.[0]?.message?.content || "Erro na IA.";
 
-    // Enviar Resposta
-    const sendRes = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+    // Enviar Resposta (Tentando múltiplos campos de número para compatibilidade)
+    await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
-      body: JSON.stringify({ number: cleanNumber, text: replyText }),
+      body: JSON.stringify({ 
+        number: cleanNumber, 
+        remoteJid: remoteJid, // Alguns formats pedem remoteJid
+        text: replyText 
+      }),
     });
 
-    console.log("Resposta enviada!", sendRes.status);
     return NextResponse.json({ success: true });
 
   } catch (err: any) {
-    console.error("ERRO CRITICO WEBHOOK:", err);
+    console.error("ERRO CRITICO:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
