@@ -188,14 +188,6 @@ export default function WhatsAppConfigPage() {
             >
               {savingProfile ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Salvar Configuração"}
             </Button>
-
-            <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <p className="text-[11px] text-blue-400 font-semibold mb-1">Passo Importante:</p>
-              <p className="text-[10px] text-slate-400 leading-relaxed">
-                Para o Agente de IA funcionar, você deve configurar o Webhook na sua Evolution API com a URL:<br/>
-                <code className="text-white bg-slate-950 px-1 rounded select-all">https://SEU-DOMINIO.vercel.app/api/whatsapp/webhook</code>
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>
