@@ -1,7 +1,6 @@
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { prisma } from "./prisma";
-import bcrypt from "bcryptjs";
+import { supabase } from "./supabase";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -16,24 +15,28 @@ export const authOptions: AuthOptions = {
           throw new Error("Credenciais inválidas");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+        // Tentar logar diretamente via Supabase Auth
+        // Isso valida a senha nativamente e já resolve os de rede do Prisma
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
         });
 
-        if (!user || !user.password) {
-          throw new Error("Usuário não encontrado");
+        if (error || !data.user) {
+          throw new Error(error?.message || "Usuário não encontrado ou senha incorreta");
         }
 
-        const isValid = await bcrypt.compare(credentials.password, user.password);
-
-        if (!isValid) {
-          throw new Error("Senha incorreta");
-        }
+        // Buscar dados extras do profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', data.user.id)
+          .single();
 
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
+          id: data.user.id,
+          email: data.user.email,
+          name: profile?.name || data.user.user_metadata?.name || "Usuário",
         };
       }
     })

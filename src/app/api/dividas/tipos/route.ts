@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -7,12 +7,15 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-  const types = await prisma.debtType.findMany({
-    where: { userId: session.user.id },
-    orderBy: { name: 'asc' }
-  });
+  const { data, error } = await supabase
+    .from('debt_types')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .order('name', { ascending: true });
 
-  return NextResponse.json(types);
+  if (error) return new NextResponse(error.message, { status: 500 });
+
+  return NextResponse.json(data);
 }
 
 export async function POST(req: Request) {
@@ -22,9 +25,13 @@ export async function POST(req: Request) {
   const { name } = await req.json();
   if (!name) return new NextResponse("Name is required", { status: 400 });
 
-  const type = await prisma.debtType.create({
-    data: { name, userId: session.user.id }
-  });
+  const { data, error } = await supabase
+    .from('debt_types')
+    .insert([{ name, user_id: session.user.id }])
+    .select()
+    .single();
 
-  return NextResponse.json(type);
+  if (error) return new NextResponse(error.message, { status: 500 });
+
+  return NextResponse.json(data);
 }

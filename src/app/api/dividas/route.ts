@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -7,32 +7,43 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-  const debts = await prisma.debt.findMany({
-    where: { debtor: { userId: session.user.id } },
-    include: { debtor: true },
-    orderBy: { dueDate: 'asc' }
-  });
+  const { data, error } = await supabase
+    .from('debts')
+    .select(`
+      *,
+      debtor:debtors(*)
+    `)
+    .eq('user_id', session.user.id)
+    .order('due_date', { ascending: true });
 
-  return NextResponse.json(debts);
+  if (error) return new NextResponse(error.message, { status: 500 });
+
+  return NextResponse.json(data);
 }
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-  const { amount, dueDate, description, status, debtorId } = await req.json();
+  const { amount, dueDate, description, status, debtorId, debtTypeId } = await req.json();
 
   if (!amount || !dueDate || !debtorId) return new NextResponse("Missing required fields", { status: 400 });
 
-  const debt = await prisma.debt.create({
-    data: {
+  const { data, error } = await supabase
+    .from('debts')
+    .insert([{
       amount,
-      dueDate: new Date(dueDate),
+      due_date: dueDate,
       description,
       status: status || 'PENDING',
-      debtorId
-    }
-  });
+      debtor_id: debtorId,
+      debt_type_id: debtTypeId,
+      user_id: session.user.id
+    }])
+    .select()
+    .single();
 
-  return NextResponse.json(debt);
+  if (error) return new NextResponse(error.message, { status: 500 });
+
+  return NextResponse.json(data);
 }
