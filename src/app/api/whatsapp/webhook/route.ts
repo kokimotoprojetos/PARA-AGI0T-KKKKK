@@ -9,12 +9,19 @@ const openaiKey = process.env.OPENAI_API_KEY;
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log("Recebendo Webhook Evolution:", JSON.stringify(body, null, 2));
+    console.log("--- WEBHOOK EVOLUTION RECEBIDO ---");
+    console.log("Evento:", body.event);
+    console.log("Tipo Mensagem:", body.data?.messageType);
+    console.log("JID Remoto:", body.data?.key?.remoteJid);
 
     const remoteJid = body.data?.key?.remoteJid;
-    if (!remoteJid) return NextResponse.json({ skipped: true });
+    if (!remoteJid) {
+      console.log("Pulo: remetente não identificado.");
+      return NextResponse.json({ skipped: true });
+    }
 
-    const cleanNumber = remoteJid.split('@')[0];
+    const cleanNumber = remoteJid.split('@')[0].replace(/\D/g, '');
+    console.log("Número limpo do remetente:", cleanNumber);
     const messageType = body.data?.messageType;
     let userMessage = "";
 
@@ -61,17 +68,20 @@ export async function POST(req: Request) {
 
     if (!userMessage) return NextResponse.json({ skipped: true });
 
-    // 2. Verificar Administrador
+    // 2. Verificar Administrador (Busca flexível)
+    // Procuramos o número exatamente como veio ou sem o prefixo 55 se o usuário salvou sem.
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id, notification_number')
-      .eq('notification_number', cleanNumber)
+      .or(`notification_number.eq.${cleanNumber},notification_number.eq.${cleanNumber.replace(/^55/, '')}`)
       .single();
 
     if (profileError || !profile) {
-      console.log("Mensagem ignorada (não é admin):", cleanNumber);
-      return NextResponse.json({ skipped: true });
+      console.log("BLOQUEIO: Número", cleanNumber, "não autorizado como administrador.");
+      return NextResponse.json({ skipped: "not_admin", numberTried: cleanNumber });
     }
+
+    console.log("Admin validado! Processando resposta da IA...");
 
     const userId = profile.id;
 
@@ -136,11 +146,18 @@ export async function POST(req: Request) {
     const replyText = aiData.choices[0].message.content;
 
     // 5. Enviar Resposta via WhatsApp
-    await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+    const sendRes = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
       body: JSON.stringify({ number: cleanNumber, text: replyText }),
     });
+
+    if (sendRes.ok) {
+        console.log("Resposta enviada com sucesso para o WhatsApp!");
+    } else {
+        const errTxt = await sendRes.text();
+        console.error("Erro ao enviar resposta via Evolution:", errTxt);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
