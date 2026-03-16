@@ -80,10 +80,13 @@ export default function WhatsAppConfigPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notification_number: notificationNumber })
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText);
+      }
       toast.success("Número de notificação salvo!");
-    } catch {
-      toast.error("Erro ao salvar número. Verifique se executou o SQL de migração.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar número. Verifique se executou o SQL de migração.");
     } finally {
       setSavingProfile(false);
     }

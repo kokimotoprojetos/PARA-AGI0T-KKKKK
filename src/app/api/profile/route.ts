@@ -25,6 +25,8 @@ export async function POST(req: Request) {
 
   const { notification_number } = await req.json();
 
+  console.log("Upserting profile for user:", userId, "Number:", notification_number);
+
   const { data, error } = await supabase
     .from('profiles')
     .upsert({ 
@@ -36,7 +38,8 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    return new NextResponse(error.message, { status: 500 });
+    console.error("Erro Supabase (profiles):", error);
+    return new NextResponse(`Erro no banco de dados: ${error.message}`, { status: 500 });
   }
 
   return NextResponse.json(data);
