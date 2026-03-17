@@ -22,19 +22,18 @@ export async function GET() {
 
     const data = await res.json();
     
-    // Se estiver conectando e houver necessidade, pegamos o base64 se Evolution v2 disponibilizar de outra rota
-    // Em versoes recentes o connectioState exibe o auth e qr se 'connecting' 
+    // Se estiver conectando ou em estado 'close', tentamos buscar o qrcode
     let qrcodeBase64 = null;
     let state = data?.instance?.state || 'close';
 
-    if (state === 'connecting') {
+    if (state === 'connecting' || state === 'close') {
         const qrRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
             method: "GET",
             headers: { "apikey": apikey as string }
         });
         if (qrRes.ok) {
             const qrData = await qrRes.json();
-            qrcodeBase64 = qrData.base64; // base64 da imagem QR na evolution API
+            qrcodeBase64 = qrData.base64 || qrData.code || null;
         }
     }
 
