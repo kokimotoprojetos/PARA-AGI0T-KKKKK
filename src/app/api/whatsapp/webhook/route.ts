@@ -224,6 +224,20 @@ export async function POST(req: Request) {
             required: ["debtorName", "phone"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "collect_debt",
+          description: "Envia uma mensagem de cobrança automática via WhatsApp diretamente para o devedor.",
+          parameters: {
+            type: "object",
+            properties: {
+              debtorName: { type: "string", description: "Nome do devedor para quem a cobrança será enviada" }
+            },
+            required: ["debtorName"]
+          }
+        }
       }
     ];
 
@@ -241,11 +255,12 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. FLUXO DE CONTATO + DÍVIDA: Se o administrador enviar um [CARTÃO DE CONTATO] e um valor (ex: "deve 500"), identifique o Nome e o Telefone do contato. Responda APENAS perguntando o vencimento: "Qual a data de pagamento?". Assim que receber a data, use 'add_debtor' para salvar NOME, TELEFONE, VALOR e DATA de uma vez.
-            2. VINCULAR CONTATO: Se o admin enviar um contato para alguém que já existe, use 'update_debtor_phone'.
-            3. OBRIGATÓRIO NOME COMPLETO: Para novos cadastros manuais sem cartão, garanta o nome completo.
-            4. SEM ENROLAÇÃO: Não dê saudações. Respostas curtas.
-            5. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
+            1. COBRANÇA (collect_debt): Se o admin disser "Cobra o Pedro", "Manda mensagem pro Pedro" ou similar, use a função 'collect_debt'. Ela enviará uma mensagem automática com o saldo devedor diretamente para o WhatsApp do cliente.
+            2. FLUXO DE CONTATO + DÍVIDA: Se enviar [CARTÃO DE CONTATO] + valor, peça a data e depois salve.
+            3. VINCULAR CONTATO: Use 'update_debtor_phone' para atrelar um contato recebido a um nome.
+            4. OBRIGATÓRIO NOME COMPLETO: Para novos cadastros manuais sem cartão, garanta o nome completo.
+            5. SEM ENROLAÇÃO: Respostas curtas e diretas.
+            6. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
@@ -358,6 +373,34 @@ export async function POST(req: Request) {
             const cleanPhone = args.phone.replace(/\D/g, '');
             const { error } = await supabase.from('debtors').update({ phone: cleanPhone }).eq('id', debtor.id).eq('user_id', userId);
             finalReply += error ? `❌ Erro ao atualizar telefone: ${error.message}\n` : `📱 WhatsApp de *${debtor.name}* atualizado para *${cleanPhone}*!\n`;
+          }
+        }
+
+        if (toolCall.function.name === "collect_debt") {
+          const matches = debtors.filter(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+
+          if (matches.length === 0) {
+            finalReply += `❌ Devedor "${args.debtorName}" não encontrado para cobrança.\n`;
+          } else if (matches.length > 1) {
+            finalReply += `🤔 Encontrei vários "${args.debtorName}". Quem você quer cobrar?\n\n` + 
+              matches.map(m => `• *${m.name}*`).join('\n');
+          } else {
+            const debtor = matches[0];
+            if (!debtor.phone) {
+              finalReply += `⚠️ O devedor *${debtor.name}* não possui telefone cadastrado para cobrança.\n`;
+            } else {
+              const debtorDebts = debts.filter(d => d.debtor_id === debtor.id && d.status === 'PENDING');
+              const total = debtorDebts.reduce((sum, d) => sum + Number(d.amount), 0);
+              const messageText = `Olá ${debtor.name}, estamos entrando em contato para lembrar de sua(s) pendência(s) no total de *R$ ${total.toFixed(2)}*. Por favor, entre em contato para regularizar.`;
+              
+              const res = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
+                body: JSON.stringify({ number: debtor.phone, text: messageText }),
+              });
+              
+              finalReply += res.ok ? `📩 Mensagem de cobrança enviada para *${debtor.name}*!\n` : `❌ Falha ao enviar cobrança para ${debtor.name}.\n`;
+            }
           }
         }
       }
