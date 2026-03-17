@@ -85,19 +85,22 @@ export default async function DashboardPage() {
             <p className="text-slate-400 text-sm">Nenhuma dívida registrada ainda. Vá até a aba Devedores para começar a cobrar.</p>
           ) : (
             <div className="space-y-4">
-              {debtsList.map(debt => (
-                <div key={debt.id} className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
-                  <div>
-                    {/* @ts-ignore */}
-                    <p className="font-semibold text-white">{debt.debtor?.name || "Devedor desconhecido"}</p>
-                    <p className="text-xs text-slate-400">{debt.description || "Sem descrição"}</p>
+              {debtsList.map(debt => {
+                const id = debt.id || Math.random().toString(36).substr(2, 9);
+                return (
+                  <div key={id} className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
+                    <div>
+                      {/* @ts-ignore */}
+                      <p className="font-semibold text-white">{debt.debtor?.name || "Devedor desconhecido"}</p>
+                      <p className="text-xs text-slate-400">{debt.description || "Sem descrição"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-emerald-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(debt.amount)}</p>
+                      <p className="text-xs text-slate-400">{new Date(debt.due_date || debt.dueDate).toLocaleDateString('pt-BR')}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-emerald-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(debt.amount)}</p>
-                    <p className="text-xs text-slate-400">{new Date(debt.due_date || debt.dueDate).toLocaleDateString('pt-BR')}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

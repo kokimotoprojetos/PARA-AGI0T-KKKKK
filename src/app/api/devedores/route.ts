@@ -75,12 +75,15 @@ export async function POST(req: Request) {
         const apikey = process.env.EVOLUTION_API_KEY;
         const instanceName = process.env.EVOLUTION_INSTANCE_NAME || "AgenteCobrador";
         
+        const cleanPhone = phone.replace(/\D/g, '');
+        const adminDest = profile.notification_number.replace(/\D/g, '');
+
         await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "apikey": apikey as string },
           body: JSON.stringify({
-            number: profile.notification_number,
-            text: `📢 *Novo Devedor Cadastrado*\n\n👤 *Nome:* ${name}\n📱 *WhatsApp:* ${phone}\n📧 *Email:* ${email || 'Não informado'}\n\nO sistema agora monitora este cliente.`
+            number: adminDest,
+            text: `📢 *Novo Devedor Cadastrado*\n\n👤 *Nome:* ${name}\n📱 *WhatsApp:* ${cleanPhone}\n📧 *Email:* ${email || 'Não informado'}\n\nO sistema agora monitora este cliente.`
           }),
         }).catch(e => console.error("Falha ao enviar alerta de admin:", e));
       }
