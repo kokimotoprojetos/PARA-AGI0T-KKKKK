@@ -27,7 +27,7 @@ export default function WhatsAppConfigPage() {
         state: currentState,
       });
 
-      // Se não estiver conectado nem conectando (ou seja, instância não iniciada), inicia automaticamente
+      // Se não estiver conectado nem conectando (ou seja, instância não iniciada ou fechada), inicia automaticamente
       if (currentState !== 'open' && currentState !== 'connecting' && !autoStartedRef.current) {
         autoStartedRef.current = true;
         console.log("Iniciando instância automaticamente...");
@@ -35,7 +35,6 @@ export default function WhatsAppConfigPage() {
       }
     } catch {
       setStatus({ isConnected: false, qrCodeData: null, state: 'ERROR' });
-      // Tenta criar se der erro de fetch também
       if (!autoStartedRef.current) {
         autoStartedRef.current = true;
         createInstance();
@@ -60,15 +59,15 @@ export default function WhatsAppConfigPage() {
   };
 
   const createInstance = async () => {
-    // Não setar loading aqui para não travar a UI no auto-start
     try {
       const res = await fetch('/api/whatsapp/status', { method: 'POST' });
       if (!res.ok) throw new Error();
       toast.info("Iniciando conexão automática...");
-      // Re-verifica o status após 2 segundos para pegar o QR
-      setTimeout(() => fetchStatus(), 2000);
+      
+      // Imediatamente tenta pegar o QR após criar
+      setTimeout(() => fetchStatus(), 1500);
     } catch {
-      autoStartedRef.current = false; // Permite tentar de novo se falhar
+      autoStartedRef.current = false;
       toast.error("Erro ao iniciar conexão automática.");
     }
   };
@@ -80,6 +79,7 @@ export default function WhatsAppConfigPage() {
       const res = await fetch('/api/whatsapp/status', { method: 'DELETE' });
       if (!res.ok) throw new Error();
       toast.success("WhatsApp desconectado com sucesso.");
+      autoStartedRef.current = false; // Permite auto-start novamente após desconectar
       fetchStatus();
     } catch {
       toast.error("Erro ao desconectar WhatsApp.");
@@ -159,18 +159,14 @@ export default function WhatsAppConfigPage() {
                   Escaneie o QR Code com seu WhatsApp.
                 </p>
               </div>
-            ) : status.state === 'ERROR' || status.state === 'close' ? (
-              <div className="flex flex-col items-center text-center p-6 border border-amber-500/30 bg-amber-500/10 rounded-2xl w-full">
-                <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
-                <h2 className="text-lg font-bold text-white text-sm">Instância Inativa</h2>
-                <Button onClick={createInstance} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold mt-4 text-xs w-full">
-                  <RefreshCw className="mr-2 h-4 w-4" /> Iniciar Instância
-                </Button>
-              </div>
             ) : (
-               <div className="flex flex-col items-center text-slate-400">
+               <div className="flex flex-col items-center text-slate-400 text-center">
                 <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-4" />
-                <p>Estado: {status.state}</p>
+                <h2 className="text-lg font-bold text-white mb-2">Preparando Conexão...</h2>
+                <p className="text-sm">Aguarde enquanto geramos seu QR Code automaticamente.</p>
+                <div className="mt-6 p-3 bg-slate-950 rounded-lg border border-slate-800 text-[10px] uppercase tracking-widest text-slate-500">
+                  Estado: {status.state}
+                </div>
               </div>
             )}
           </CardContent>
