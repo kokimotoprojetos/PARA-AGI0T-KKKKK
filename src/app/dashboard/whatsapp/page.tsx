@@ -19,22 +19,32 @@ export default function WhatsAppConfigPage() {
       const res = await fetch('/api/whatsapp/status');
       const data = await res.json();
       
-      const currentState = data.instance?.state || 'ERROR';
+      const currentState = data.instance?.state || 'close';
       
       setStatus({
         isConnected: currentState === 'open',
-        qrCodeData: currentState === 'connecting' ? data.instance?.qrcode : null,
+        qrCodeData: data.instance?.qrcode || null,
         state: currentState,
       });
 
-      // Se não estiver conectado nem conectando (ou seja, instância não iniciada ou fechada), inicia automaticamente
+      // Se não estiver conectado nem conectando (ou seja, instância não iniciada), inicia automaticamente
       if (currentState !== 'open' && currentState !== 'connecting' && !autoStartedRef.current) {
         autoStartedRef.current = true;
-        console.log("Iniciando instância automaticamente...");
+        console.log("Instância não encontrada ou fechada. Iniciando...");
         createInstance();
       }
-    } catch {
+
+      // Se por algum motivo o QR sumiu mas o estado é conectando, tenta novamente resetando o ref
+      if (currentState === 'connecting' && !data.instance?.qrcode && autoStartedRef.current) {
+          // Pequena espera antes de tentar de novo, talvez a Evolution ainda esteja gerando
+          console.log("Conectando mas sem QR. Aguardando...");
+      }
+
+    } catch (error) {
+      console.error("Erro ao buscar status:", error);
       setStatus({ isConnected: false, qrCodeData: null, state: 'ERROR' });
+      
+      // Tenta criar se der erro de fetch, pois a instância pode não existir
       if (!autoStartedRef.current) {
         autoStartedRef.current = true;
         createInstance();
