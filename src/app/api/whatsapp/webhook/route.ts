@@ -165,7 +165,10 @@ export async function POST(req: Request) {
             type: "object",
             properties: {
               name: { type: "string", description: "Nome completo do devedor" },
-              phone: { type: "string", description: "Telefone/WhatsApp do devedor (opcional, apenas números)" }
+              phone: { type: "string", description: "Telefone/WhatsApp (opcional)" },
+              amount: { type: "number", description: "Valor da dívida inicial (opcional)" },
+              dueDate: { type: "string", description: "Data de vencimento YYYY-MM-DD (opcional)" },
+              description: { type: "string", description: "Descrição da dívida (opcional)" }
             },
             required: ["name"]
           }
@@ -203,16 +206,13 @@ export async function POST(req: Request) {
             
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
-            MISSÃO PRINCIPAL:
-            - Gerenciar devedores e dívidas (Adicionar, Consultar, Listar).
-            - ANALISE CADA MENSAGEM COM EXTREMA ATENÇÃO: Se o usuário quer cadastrar alguém ou lançar dívida, FAÇA-O IMEDIATAMENTE.
-            
             REGRAS DE OURO:
-            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar", "quanto fulano deve" como assunto não permitido. Isso é o CORAÇÃO do sistema.
+            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" como assunto não permitido.
             2. SEM ENROLAÇÃO: Não dê saudações. Vá direto ao ponto.
-            3. EXECUÇÃO INSTANTÂNEA: Use 'add_debtor' ou 'add_debt' assim que identificar a intenção, mesmo com dados parciais.
-            4. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
-            5. O BLOQUEIO DE ASSUNTO ("Assunto não permitido") só deve ocorrer se pedirem coisas totalmente alheias como "quem ganhou o jogo" ou "receita de bolo".
+            3. INTELIGÊNCIA DE LANÇAMENTO: Se o admin disser "Adiciona Pedro que me deve 100 reais", você deve usar 'add_debtor' passando o NOME e o VALOR/DATA da dívida ao mesmo tempo. Não faça um de cada vez.
+            4. Se o devedor já existir, use 'add_debt'. Se for novo, use 'add_debtor' com os dados extras.
+            5. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
+            6. DATA ATUAL para cálculos: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
@@ -239,11 +239,32 @@ export async function POST(req: Request) {
             name: args.name, 
             user_id: userId 
           };
-          if (args.phone) {
-            insertObj.phone = args.phone.replace(/\D/g, '');
+          if (args.phone) insertObj.phone = args.phone.replace(/\D/g, '');
+          
+          const { data: newDebtor, error: debtorError } = await supabase
+            .from('debtors')
+            .insert([insertObj])
+            .select()
+            .single();
+
+          if (debtorError) {
+            finalReply += `❌ Erro ao cadastrar ${args.name}: ${debtorError.message}\n`;
+          } else {
+            finalReply += `✅ Devedor *${args.name}* cadastrado.\n`;
+            
+            // Se houver dados de dívida, cadastra no mesmo fluxo
+            if (args.amount && args.dueDate) {
+              const { error: debtError } = await supabase.from('debts').insert([{
+                amount: args.amount,
+                due_date: args.dueDate,
+                description: args.description || "Dívida inicial",
+                debtor_id: newDebtor.id,
+                user_id: userId,
+                status: 'PENDING'
+              }]);
+              finalReply += debtError ? `❌ Erro ao lançar dívida: ${debtError.message}\n` : `💰 Dívida de *R$ ${args.amount}* lançada para *${args.name}*!\n`;
+            }
           }
-          const { error } = await supabase.from('debtors').insert([insertObj]);
-          finalReply += error ? `❌ Erro ao cadastrar ${args.name}: ${error.message}\n` : `✅ Devedor *${args.name}* cadastrado com sucesso!\n`;
         }
 
         if (toolCall.function.name === "add_debt") {
