@@ -221,11 +221,12 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. AMBIGUIDADE DE NOMES (CRÍTICO): Se houver mais de um devedor com nome parecido (ex: você achou 3 "Pedro"), você NUNCA deve executar a ação de imediato. Você deve listar todos os nomes completos encontrados e seus saldos totais, perguntando: "Encontrei vários [Nome]. Qual deles?".
-            2. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR/REMOVER" como assunto não permitido.
-            3. FLUXO DE DELEÇÃO: Mostre detalhes e peça "Sim" antes de deletar.
-            4. SEM ENROLAÇÃO: Respostas curtas e diretas.
-            5. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
+            1. OBRIGATÓRIO NOME COMPLETO: Antes de cadastrar (add_debtor) ou cobrar (add_debt), você DEVE garantir que tem o NOME COMPLETO do devedor. Se o administrador disser apenas um nome parcial ou primeiro nome (ex: "Adiciona o Pedro"), você NÃO deve executar. Responda apenas: "Qual o nome completo do devedor?".
+            2. AMBIGUIDADE DE NOMES: Se o nome for parecido com vários que já existem, liste-os com saldo e peça o nome completo do correto.
+            3. SEM ENROLAÇÃO: Após ter o nome completo e os dados, execute e responda apenas "✅ [Ação concluída]". Não diga "Olá", "Entendido" ou saudações.
+            4. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR" como assunto não permitido.
+            5. FLUXO DE DELEÇÃO: Mostre detalhes e peça "Sim" antes de deletar.
+            6. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
