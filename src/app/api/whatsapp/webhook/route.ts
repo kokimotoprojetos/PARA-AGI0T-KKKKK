@@ -221,14 +221,11 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR/REMOVER" como assunto não permitido.
-            2. FLUXO DE DELEÇÃO (OBRIGATÓRIO): Quando pedirem para deletar/remover alguém, você NÃO deve chamar a função 'delete_debtor' de imediato. 
-               - PASSO 1: Responda mostrando o nome completo e o total que ele deve (use os DADOS DO PAINEL abaixo), e pergunte: "⚠️ Confirma a exclusão permanente de [Nome]?".
-               - PASSO 2: SOMENTE se o usuário responder "Sim", "Pode", "Confirmo", ou similar, você deve chamar a função 'delete_debtor'.
-            3. SEM ENROLAÇÃO: Não dê saudações. Vá direto ao ponto.
-            4. INTELIGÊNCIA DE LANÇAMENTO: Se o admin disser "Adiciona Pedro que me deve 100 reais", use 'add_debtor' com os dados completos.
-            5. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
-            6. DATA ATUAL para cálculos: ${new Date().toLocaleDateString('pt-BR')}.
+            1. AMBIGUIDADE DE NOMES (CRÍTICO): Se houver mais de um devedor com nome parecido (ex: você achou 3 "Pedro"), você NUNCA deve executar a ação de imediato. Você deve listar todos os nomes completos encontrados e seus saldos totais, perguntando: "Encontrei vários [Nome]. Qual deles?".
+            2. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR/REMOVER" como assunto não permitido.
+            3. FLUXO DE DELEÇÃO: Mostre detalhes e peça "Sim" antes de deletar.
+            4. SEM ENROLAÇÃO: Respostas curtas e diretas.
+            5. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
@@ -284,10 +281,19 @@ export async function POST(req: Request) {
         }
 
         if (toolCall.function.name === "add_debt") {
-          const debtor = debtors.find(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
-          if (!debtor) {
-            finalReply += `❌ Não encontrei nenhum devedor chamado "${args.debtorName}". Cadastre-o primeiro.\n`;
+          const matches = debtors.filter(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+          
+          if (matches.length === 0) {
+            finalReply += `❌ Não encontrei nenhum devedor chamado "${args.debtorName}".\n`;
+          } else if (matches.length > 1) {
+            finalReply += `🤔 Encontrei ${matches.length} devedores com nomes parecidos:\n\n` + 
+              matches.map(m => {
+                const balance = debts.filter(d => d.debtor_id === m.id && d.status === 'PENDING').reduce((s, b) => s + Number(b.amount), 0);
+                return `• *${m.name}* (Saldo: R$ ${balance.toFixed(2)})`;
+              }).join('\n') + 
+              `\n\nPor favor, digite o nome completo para lançar a dívida.`;
           } else {
+            const debtor = matches[0];
             const { error } = await supabase.from('debts').insert([{
               amount: args.amount,
               due_date: args.dueDate,
@@ -301,10 +307,19 @@ export async function POST(req: Request) {
         }
 
         if (toolCall.function.name === "delete_debtor") {
-          const debtor = debtors.find(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
-          if (!debtor) {
+          const matches = debtors.filter(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+          
+          if (matches.length === 0) {
             finalReply += `❌ Devedor "${args.debtorName}" não encontrado.\n`;
+          } else if (matches.length > 1) {
+            finalReply += `🤔 Encontrei ${matches.length} pessoas com nomes parecidos:\n\n` + 
+              matches.map(m => {
+                const balance = debts.filter(d => d.debtor_id === m.id && d.status === 'PENDING').reduce((s, b) => s + Number(b.amount), 0);
+                return `• *${m.name}* (Saldo: R$ ${balance.toFixed(2)})`;
+              }).join('\n') + 
+              `\n\nQual deles você deseja remover? Digite o nome completo.`;
           } else {
+            const debtor = matches[0];
             const { error } = await supabase.from('debtors').delete().eq('id', debtor.id).eq('user_id', userId);
             finalReply += error ? `❌ Erro ao deletar: ${error.message}\n` : `🗑️ *${debtor.name}* e suas dívidas foram removidos.\n`;
           }
