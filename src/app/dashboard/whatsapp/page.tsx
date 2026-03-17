@@ -14,7 +14,7 @@ export default function WhatsAppConfigPage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const autoStartedRef = useRef(false);
 
-  const fetchStatus = async () => {
+  const fetchStatus = async (isFirstLoad = false) => {
     try {
       const res = await fetch('/api/whatsapp/status');
       const data = await res.json();
@@ -27,14 +27,21 @@ export default function WhatsAppConfigPage() {
         state: currentState,
       });
 
-      if ((currentState === 'ERROR' || currentState === 'close') && !autoStartedRef.current) {
+      // Se não estiver conectado nem conectando (ou seja, instância não iniciada), inicia automaticamente
+      if (currentState !== 'open' && currentState !== 'connecting' && !autoStartedRef.current) {
         autoStartedRef.current = true;
+        console.log("Iniciando instância automaticamente...");
         createInstance();
       }
     } catch {
       setStatus({ isConnected: false, qrCodeData: null, state: 'ERROR' });
+      // Tenta criar se der erro de fetch também
+      if (!autoStartedRef.current) {
+        autoStartedRef.current = true;
+        createInstance();
+      }
     } finally {
-      setLoading(false);
+      if (isFirstLoad) setLoading(false);
     }
   };
 
@@ -53,15 +60,16 @@ export default function WhatsAppConfigPage() {
   };
 
   const createInstance = async () => {
-    setLoading(true);
+    // Não setar loading aqui para não travar a UI no auto-start
     try {
       const res = await fetch('/api/whatsapp/status', { method: 'POST' });
       if (!res.ok) throw new Error();
-      toast.success("Instância iniciada. Aguarde o QRCode...");
-      fetchStatus();
+      toast.info("Iniciando conexão automática...");
+      // Re-verifica o status após 2 segundos para pegar o QR
+      setTimeout(() => fetchStatus(), 2000);
     } catch {
-      toast.error("Erro ao iniciar conexão com a Evolution API.");
-      setLoading(false);
+      autoStartedRef.current = false; // Permite tentar de novo se falhar
+      toast.error("Erro ao iniciar conexão automática.");
     }
   };
 
@@ -101,9 +109,9 @@ export default function WhatsAppConfigPage() {
   };
 
   useEffect(() => {
-    fetchStatus();
+    fetchStatus(true);
     fetchProfile();
-    const interval = setInterval(fetchStatus, 4000);
+    const interval = setInterval(() => fetchStatus(false), 4000);
     return () => clearInterval(interval);
   }, []);
 
