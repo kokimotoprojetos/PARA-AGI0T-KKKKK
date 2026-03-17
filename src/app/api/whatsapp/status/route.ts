@@ -31,9 +31,16 @@ export async function GET() {
             method: "GET",
             headers: { "apikey": apikey as string }
         });
+        
         if (qrRes.ok) {
             const qrData = await qrRes.json();
-            qrcodeBase64 = qrData.base64 || qrData.code || null;
+            // Evolution v2 pode retornar 'base64' (já com prefixo) ou 'code' (string crua do QR)
+            // Priorizamos o 'code' para o frontend gerar o QR localmente, o que é mais estável
+            // Se não tiver 'code', usamos o 'base64'
+            qrcodeBase64 = qrData.code || qrData.base64 || null;
+            
+            // Log para debug interno (remova em prod se quiser)
+            console.log("QR Data recebido da Evolution:", qrcodeBase64 ? "Sim (Início: " + qrcodeBase64.substring(0, 20) + "...)" : "Não");
         }
     }
 

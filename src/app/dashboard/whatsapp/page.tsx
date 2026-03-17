@@ -159,15 +159,24 @@ export default function WhatsAppConfigPage() {
             ) : status.qrCodeData ? (
                <div className="flex flex-col items-center">
                 <div className="p-4 bg-white rounded-xl shadow-lg border-4 border-slate-800">
-                  {status.qrCodeData.startsWith('data:image') ? (
-                    <img src={status.qrCodeData} alt="QR Code" width={256} className="rounded-md" />
+                  {(status.qrCodeData.startsWith('data:image') || (status.qrCodeData.length > 500 && !status.qrCodeData.includes(' '))) ? (
+                    <img 
+                        src={status.qrCodeData.startsWith('data:image') ? status.qrCodeData : `data:image/png;base64,${status.qrCodeData}`} 
+                        alt="QR Code" 
+                        width={256} 
+                        className="rounded-md" 
+                    />
                   ) : (
                     <QRCodeSVG value={status.qrCodeData} size={256} className="rounded-md" />
                   )}
                 </div>
-                <p className="text-slate-400 mt-6 text-xs text-center">
-                  Escaneie o QR Code com seu WhatsApp.
+                <p className="text-slate-400 mt-6 text-xs text-center px-4">
+                  Escaneie o QR Code com seu WhatsApp. <br/>
+                  Se o QR não funcionar, tente reiniciar a instância abaixo.
                 </p>
+                <Button variant="outline" onClick={disconnectInstance} className="mt-4 border-slate-700 text-slate-400 hover:bg-slate-800 text-xs py-1 h-8">
+                  <RefreshCw className="mr-2 h-3 w-3" /> Reiniciar Instância
+                </Button>
               </div>
             ) : (
                <div className="flex flex-col items-center text-slate-400 text-center">
