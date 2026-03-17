@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       // 2. Buscar dívidas pendentes deste usuário
       const { data: debts } = await supabase
         .from('debts')
-        .select('*, debtor:debtors(name)')
+        .select('*, debtor:debtors(name, phone)')
         .eq('user_id', profile.id)
         .eq('status', 'PENDING');
 

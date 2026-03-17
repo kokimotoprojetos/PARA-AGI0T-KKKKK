@@ -115,10 +115,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ skipped: true, reason: "empty_or_unsupported" });
     }
 
-    // VERIFICAÇÃO DE ADMIN (NUCLEAR v2)
+    // VERIFICAÇÃO DE ADMIN (NUCLEAR v2) - Incluindo chat_history para memória
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, notification_number')
+      .select('id, notification_number, chat_history')
       .not('notification_number', 'is', null);
 
     const adminProfile = profiles?.find(p => {
@@ -241,7 +241,12 @@ export async function POST(req: Request) {
       }
     ];
 
-    // Chamar GPT-4o com Tools
+    // 4. Gestão de Memória (Chat History)
+    let history = Array.isArray(adminProfile.chat_history) ? adminProfile.chat_history : [];
+    history.push({ role: "user", content: userMessage });
+    if (history.length > 6) history = history.slice(-6); // Mantém as últimas 6 mensagens para contexto
+
+    // Chamar GPT-4o com Tools e Memória
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
@@ -255,9 +260,9 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. COBRANÇA (collect_debt): Se o admin disser "Cobra o Pedro", "Manda mensagem pro Pedro" ou similar, use a função 'collect_debt'. Ela enviará uma mensagem automática com o saldo devedor diretamente para o WhatsApp do cliente.
-            2. FLUXO DE CONTATO + DÍVIDA: Se enviar [CARTÃO DE CONTATO] + valor, peça a data e depois salve.
-            3. VINCULAR CONTATO: Use 'update_debtor_phone' para atrelar um contato recebido a um nome.
+            1. MEMÓRIA DE CURTO PRAZO: Você agora vê o histórico recente. Se o admin enviou um [CARTÃO DE CONTATO] e na mensagem seguinte deu uma instrução (ex: "ele deve 100"), use os dados do contato anterior para completar a ação.
+            2. FLUXO DE CONTATO + DÍVIDA: Se enviar [CARTÃO DE CONTATO] + valor, peça a data e depois salve. Use o nome/telefone do link.
+            3. VINCULAR CONTATO: Use 'update_debtor_phone' para atrelar um contato recebido a um nome existente.
             4. OBRIGATÓRIO NOME COMPLETO: Para novos cadastros manuais sem cartão, garanta o nome completo.
             5. SEM ENROLAÇÃO: Respostas curtas e diretas.
             6. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
@@ -265,7 +270,7 @@ export async function POST(req: Request) {
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
           },
-          { role: "user", content: userMessage }
+          ...history
         ],
         tools: tools,
         tool_choice: "auto"
@@ -419,6 +424,11 @@ export async function POST(req: Request) {
         options: { delay: 1000, presence: "composing" }
       }),
     });
+
+    // Salvar Resposta no Histórico e Atualizar Banco
+    history.push({ role: "assistant", content: finalReply });
+    if (history.length > 6) history = history.slice(-6);
+    await supabase.from('profiles').update({ chat_history: history }).eq('id', userId);
 
     return NextResponse.json({ success: true });
 
