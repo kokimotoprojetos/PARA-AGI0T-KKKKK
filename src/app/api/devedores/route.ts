@@ -25,15 +25,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, phone, email, address } = body;
 
-    if (!name || !phone) {
-      return new NextResponse("Nome e Telefone são obrigatórios", { status: 400 });
+    if (!name) {
+      return new NextResponse("O nome é obrigatório", { status: 400 });
     }
 
     const insertData: any = { 
       name, 
-      phone, 
       user_id: userId 
     };
+
+    if (phone) insertData.phone = phone.replace(/\D/g, '');
     
     // Garantir que o perfil do usuário existe (usando upsert para evitar erro de chave duplicada)
     const { error: profileError } = await supabase
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
         const apikey = process.env.EVOLUTION_API_KEY;
         const instanceName = process.env.EVOLUTION_INSTANCE_NAME || "AgenteCobrador";
         
-        const cleanPhone = phone.replace(/\D/g, '');
+        const cleanPhone = phone ? phone.replace(/\D/g, '') : 'Não informado';
         const adminDest = profile.notification_number.replace(/\D/g, '');
 
         await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {

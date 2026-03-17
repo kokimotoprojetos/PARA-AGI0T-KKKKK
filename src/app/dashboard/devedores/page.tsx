@@ -111,8 +111,8 @@ export default function DevedoresPage() {
                 <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-slate-300">WhatsApp (com DDD)</Label>
-                <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Ex: 11999999999" className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white" required />
+                <Label htmlFor="phone" className="text-slate-300">WhatsApp (Opcional)</Label>
+                <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Ex: 11999999999" className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-slate-300">Email (Opcional)</Label>

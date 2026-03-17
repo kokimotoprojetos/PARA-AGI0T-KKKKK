@@ -165,9 +165,9 @@ export async function POST(req: Request) {
             type: "object",
             properties: {
               name: { type: "string", description: "Nome completo do devedor" },
-              phone: { type: "string", description: "Telefone/WhatsApp do devedor (apenas números)" }
+              phone: { type: "string", description: "Telefone/WhatsApp do devedor (opcional, apenas números)" }
             },
-            required: ["name", "phone"]
+            required: ["name"]
           }
         }
       },
@@ -231,11 +231,14 @@ export async function POST(req: Request) {
         const args = JSON.parse(toolCall.function.arguments);
         
         if (toolCall.function.name === "add_debtor") {
-          const { error } = await supabase.from('debtors').insert([{ 
+          const insertObj: any = { 
             name: args.name, 
-            phone: args.phone.replace(/\D/g, ''), 
             user_id: userId 
-          }]);
+          };
+          if (args.phone) {
+            insertObj.phone = args.phone.replace(/\D/g, '');
+          }
+          const { error } = await supabase.from('debtors').insert([insertObj]);
           finalReply += error ? `❌ Erro ao cadastrar ${args.name}: ${error.message}\n` : `✅ Devedor *${args.name}* cadastrado com sucesso!\n`;
         }
 
