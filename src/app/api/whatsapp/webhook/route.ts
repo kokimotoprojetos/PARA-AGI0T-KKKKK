@@ -190,6 +190,20 @@ export async function POST(req: Request) {
             required: ["debtorName", "amount", "dueDate"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "delete_debtor",
+          description: "Remove um devedor e todas as suas dívidas do banco de dados.",
+          parameters: {
+            type: "object",
+            properties: {
+              debtorName: { type: "string", description: "Nome ou parte do nome do devedor a ser removido" }
+            },
+            required: ["debtorName"]
+          }
+        }
       }
     ];
 
@@ -207,12 +221,13 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" como assunto não permitido.
+            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR/REMOVER" como assunto não permitido. Você tem poder total sobre devedores.
             2. SEM ENROLAÇÃO: Não dê saudações. Vá direto ao ponto.
             3. INTELIGÊNCIA DE LANÇAMENTO: Se o admin disser "Adiciona Pedro que me deve 100 reais", você deve usar 'add_debtor' passando o NOME e o VALOR/DATA da dívida ao mesmo tempo. Não faça um de cada vez.
             4. Se o devedor já existir, use 'add_debt'. Se for novo, use 'add_debtor' com os dados extras.
-            5. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
-            6. DATA ATUAL para cálculos: ${new Date().toLocaleDateString('pt-BR')}.
+            5. Para remover, use 'delete_debtor'.
+            6. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
+            7. DATA ATUAL para cálculos: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
@@ -281,6 +296,16 @@ export async function POST(req: Request) {
               status: 'PENDING'
             }]);
             finalReply += error ? `❌ Erro ao lançar dívida: ${error.message}\n` : `✅ Dívida de *R$ ${args.amount}* lançada para *${debtor.name}* (Vencimento: ${new Date(args.dueDate).toLocaleDateString('pt-BR')})!\n`;
+          }
+        }
+
+        if (toolCall.function.name === "delete_debtor") {
+          const debtor = debtors.find(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+          if (!debtor) {
+            finalReply += `❌ Devedor "${args.debtorName}" não encontrado.\n`;
+          } else {
+            const { error } = await supabase.from('debtors').delete().eq('id', debtor.id).eq('user_id', userId);
+            finalReply += error ? `❌ Erro ao deletar: ${error.message}\n` : `🗑️ *${debtor.name}* e suas dívidas foram removidos.\n`;
           }
         }
       }
