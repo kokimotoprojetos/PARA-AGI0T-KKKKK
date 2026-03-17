@@ -101,6 +101,14 @@ export async function GET(req: Request) {
         if (shouldNotify && message) {
             await sendWhatsApp(profile.notification_number, message);
             
+            // --- NOVIDADE: Cobrança Direta ao Devedor ---
+            // Se hoje é o dia do vencimento, envia mensagem diretamente para o devedor também
+            if (daysRemaining === 0 && debt.debtor.phone) {
+                const debtorMessage = `Olá *${debt.debtor.name}*, informamos que sua dívida no valor de *R$ ${Number(debt.amount).toFixed(2)}* vence hoje.\n\nPor favor, entre em contato para realizar o pagamento através do número: *${profile.notification_number}*.`;
+                await sendWhatsApp(debt.debtor.phone, debtorMessage);
+                console.log(`Cobrança direta enviada para devedor: ${debt.debtor.name}`);
+            }
+
             // Atualizar o banco com o horário da última notificação
             await supabase
                 .from('debts')
