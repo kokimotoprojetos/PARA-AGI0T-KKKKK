@@ -35,8 +35,15 @@ export async function POST(req: Request) {
       user_id: userId 
     };
     
-    // Garantir que o perfil do usuário existe (para satisfazer FKs se ainda existirem)
-    await supabase.from('profiles').insert([{ id: userId }]).select();
+    // Garantir que o perfil do usuário existe (usando upsert para evitar erro de chave duplicada)
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert({ id: userId }, { onConflict: 'id' })
+      .select();
+
+    if (profileError) {
+      console.error("Erro ao garantir perfil:", profileError);
+    }
 
     // Somente adiciona se existirem no body
     if (email) insertData.email = email;
