@@ -110,6 +110,11 @@ export default function DividasPage() {
   };
 
   const triggerCobrar = async (debt: Debt) => {
+    if (!debt.debtor.phone) {
+      toast.error(`O devedor ${debt.debtor.name} não possui um número de WhatsApp cadastrado.`);
+      return;
+    }
+
     toast.promise(
       fetch('/api/whatsapp/cobrar', {
         method: 'POST',

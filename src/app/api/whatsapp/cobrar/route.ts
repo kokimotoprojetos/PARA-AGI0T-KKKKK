@@ -7,6 +7,10 @@ export async function POST(req: Request) {
 
   const { phone, amount, dueDate, name } = await req.json();
 
+  if (!phone) {
+    return new NextResponse("Número de telefone não informado.", { status: 400 });
+  }
+
   const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
   const formattedDate = new Date(dueDate).toLocaleDateString('pt-BR');
 
