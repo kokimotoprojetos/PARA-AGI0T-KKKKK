@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { QRCodeSVG } from "qrcode.react";
 import { Loader2, Smartphone, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
@@ -12,17 +12,25 @@ export default function WhatsAppConfigPage() {
   const [loading, setLoading] = useState(true);
   const [notificationNumber, setNotificationNumber] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const autoStartedRef = useRef(false);
 
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/whatsapp/status');
       const data = await res.json();
       
+      const currentState = data.instance?.state || 'ERROR';
+      
       setStatus({
-        isConnected: data.instance?.state === 'open',
-        qrCodeData: data.instance?.state === 'connecting' ? data.instance?.qrcode : null,
-        state: data.instance?.state || 'ERROR',
+        isConnected: currentState === 'open',
+        qrCodeData: currentState === 'connecting' ? data.instance?.qrcode : null,
+        state: currentState,
       });
+
+      if ((currentState === 'ERROR' || currentState === 'close') && !autoStartedRef.current) {
+        autoStartedRef.current = true;
+        createInstance();
+      }
     } catch {
       setStatus({ isConnected: false, qrCodeData: null, state: 'ERROR' });
     } finally {

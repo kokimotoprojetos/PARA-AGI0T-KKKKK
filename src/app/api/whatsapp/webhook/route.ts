@@ -154,7 +154,43 @@ export async function POST(req: Request) {
     ${pendingDebts.map(d => `- Nome: ${d.debtor?.name}\n  Valor: R$ ${Number(d.amount).toFixed(2)}\n  Vencimento: ${new Date(d.due_date).toLocaleDateString('pt-BR')}\n  Descrição: ${d.description || 'Sem descrição'}`).join('\n')}
     `;
 
-    // Resposta com OpenAI
+    // 4. Definição de Funções (Tools) para o GPT
+    const tools: any[] = [
+      {
+        type: "function",
+        function: {
+          name: "add_debtor",
+          description: "Cadastra um novo devedor no banco de dados.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Nome completo do devedor" },
+              phone: { type: "string", description: "Telefone/WhatsApp do devedor (apenas números)" }
+            },
+            required: ["name", "phone"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "add_debt",
+          description: "Lança uma nova dívida para um devedor existente.",
+          parameters: {
+            type: "object",
+            properties: {
+              debtorName: { type: "string", description: "Nome do devedor conforme cadastrado" },
+              amount: { type: "number", description: "Valor da dívida (ex: 150.50)" },
+              dueDate: { type: "string", description: "Data de vencimento no formato YYYY-MM-DD" },
+              description: { type: "string", description: "Breve descrição da dívida" }
+            },
+            required: ["debtorName", "amount", "dueDate"]
+          }
+        }
+      }
+    ];
+
+    // Chamar GPT-4o com Tools
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
@@ -163,23 +199,66 @@ export async function POST(req: Request) {
         messages: [
           { 
             role: "system", 
-            content: `Você é o Agente de IA do AgenteCobrador. Sua função é ajudar o administrador com informações financeiras.
+            content: `Você é o assistente virtual financeiro e super inteligente do AgenteCobrador. Você ajuda o administrador a gerir devedores e dívidas.
             
-            QUANDO O ADMIN PERGUNTAR "QUEM ESTÁ DEVENDO" OU PEDIR RELATÓRIOS:
-            - Forneça uma lista completa e organizada.
-            - Para cada devedor, apresente: Nome, Valor da Dívida e Data de Vencimento.
-            - Seja cordial mas direto. Use emojis para organizar a lista.
+            REGRAS ESTRITAS DE OPERAÇÃO:
+            1. RESTRIÇÃO DE ASSUNTO: VOCÊ DEVE RESPONDER ÚNICA E EXCLUSIVAMENTE SOBRE DADOS DO DASHBOARD, DEVEDORES E COBRANÇAS. SE O USUÁRIO PERGUNTAR QUALQUER OUTRA COISA (como receitas de bolo, programação, piadas, etc.), VOCÊ DEVE RECUSAR EDUCADAMENTE DIZENDO QUE SÓ PODE TRATAR DE ASSUNTOS DO PAINEL.
+            2. Se o admin quiser cadastrar alguém: Use a função 'add_debtor'.
+            3. Se o admin quiser lançar uma dívida: Use a função 'add_debt'. 
+               - Se ele não disser o nome exato, tente achar na lista de devedores do painel.
+               - Se o devedor não existir, avise que precisa cadastrar o devedor primeiro.
+            4. Se perguntar "quem está devendo", "qual a próxima cobrança", "quanto o fulano deve", ou qualquer outro relatório: Use a DADOS DO PAINEL abaixo para responder. Faça cálculos matemáticos simples se precisar somar a dívida de alguém.
+            5. Retorne os dados formatados de maneira bonita e legível para WhatsApp (use *negrito*, listas, emojis), sendo o mais útil e inteligente possível.
             
-            DADOS DO PAINEL PARA CONSULTA:
+            DADOS DO PAINEL (Para consulta e match de nomes):
             ${systemContext}` 
           },
           { role: "user", content: userMessage }
-        ]
+        ],
+        tools: tools,
+        tool_choice: "auto"
       })
     });
 
     const aiData = await aiResponse.json();
-    const replyText = aiData.choices?.[0]?.message?.content || "Erro IA";
+    const message = aiData.choices?.[0]?.message;
+
+    let finalReply = "";
+
+    // 5. Processar execução de funções (se houver)
+    if (message?.tool_calls) {
+      for (const toolCall of message.tool_calls) {
+        const args = JSON.parse(toolCall.function.arguments);
+        
+        if (toolCall.function.name === "add_debtor") {
+          const { error } = await supabase.from('debtors').insert([{ 
+            name: args.name, 
+            phone: args.phone.replace(/\D/g, ''), 
+            user_id: userId 
+          }]);
+          finalReply += error ? `❌ Erro ao cadastrar ${args.name}: ${error.message}\n` : `✅ Devedor *${args.name}* cadastrado com sucesso!\n`;
+        }
+
+        if (toolCall.function.name === "add_debt") {
+          const debtor = debtors.find(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+          if (!debtor) {
+            finalReply += `❌ Não encontrei nenhum devedor chamado "${args.debtorName}". Cadastre-o primeiro.\n`;
+          } else {
+            const { error } = await supabase.from('debts').insert([{
+              amount: args.amount,
+              due_date: args.dueDate,
+              description: args.description || "",
+              debtor_id: debtor.id,
+              user_id: userId,
+              status: 'PENDING'
+            }]);
+            finalReply += error ? `❌ Erro ao lançar dívida: ${error.message}\n` : `✅ Dívida de *R$ ${args.amount}* lançada para *${debtor.name}* (Vencimento: ${new Date(args.dueDate).toLocaleDateString('pt-BR')})!\n`;
+          }
+        }
+      }
+    } else {
+      finalReply = message?.content || "Desculpe, não entendi o pedido.";
+    }
 
     // Enviar Resposta (v2 Compatibility)
     console.log("Enviando resposta v2 para:", cleanNumber);
@@ -188,11 +267,8 @@ export async function POST(req: Request) {
       headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
       body: JSON.stringify({ 
         number: cleanNumber,
-        text: replyText,
-        options: {
-            delay: 1200,
-            presence: "composing"
-        }
+        text: finalReply,
+        options: { delay: 1000, presence: "composing" }
       }),
     });
 
