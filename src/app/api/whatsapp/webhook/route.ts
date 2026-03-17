@@ -199,10 +199,9 @@ export async function POST(req: Request) {
           parameters: {
             type: "object",
             properties: {
-              debtorName: { type: "string", description: "Nome ou parte do nome do devedor a ser removido" },
-              confirmed: { type: "boolean", description: "SÓ mude para true se o usuário disser explicitamente 'sim', 'confirmo' ou 'pode deletar' APÓS você mostrar os dados dele." }
+              debtorName: { type: "string", description: "Nome ou parte do nome do devedor a ser removido PERMANENTEMENTE" }
             },
-            required: ["debtorName", "confirmed"]
+            required: ["debtorName"]
           }
         }
       }
@@ -222,13 +221,14 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR/REMOVER" como assunto não permitido. Você tem poder total sobre devedores.
-            2. SEGURANÇA NA DELEÇÃO: Quando pedirem para deletar/remover alguém, você DEVE primeiro listar o nome completo e o total que ele deve, e perguntar "Confirma a exclusão de [Nome]?". NÃO chame a função 'delete_debtor' com confirmed=true até que ele diga "sim/pode".
+            1. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR/REMOVER" como assunto não permitido.
+            2. FLUXO DE DELEÇÃO (OBRIGATÓRIO): Quando pedirem para deletar/remover alguém, você NÃO deve chamar a função 'delete_debtor' de imediato. 
+               - PASSO 1: Responda mostrando o nome completo e o total que ele deve (use os DADOS DO PAINEL abaixo), e pergunte: "⚠️ Confirma a exclusão permanente de [Nome]?".
+               - PASSO 2: SOMENTE se o usuário responder "Sim", "Pode", "Confirmo", ou similar, você deve chamar a função 'delete_debtor'.
             3. SEM ENROLAÇÃO: Não dê saudações. Vá direto ao ponto.
-            4. INTELIGÊNCIA DE LANÇAMENTO: Se o admin disser "Adiciona Pedro que me deve 100 reais", você deve usar 'add_debtor' passando o NOME e o VALOR/DATA da dívida ao mesmo tempo.
-            5. Se o devedor já existir, use 'add_debt'. Se for novo, use 'add_debtor' com os dados extras.
-            6. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
-            7. DATA ATUAL para cálculos: ${new Date().toLocaleDateString('pt-BR')}.
+            4. INTELIGÊNCIA DE LANÇAMENTO: Se o admin disser "Adiciona Pedro que me deve 100 reais", use 'add_debtor' com os dados completos.
+            5. RESPOSTAS CURTAS: Responda apenas "✅ [Ação concluída]".
+            6. DATA ATUAL para cálculos: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
             ${systemContext}` 
@@ -304,10 +304,6 @@ export async function POST(req: Request) {
           const debtor = debtors.find(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
           if (!debtor) {
             finalReply += `❌ Devedor "${args.debtorName}" não encontrado.\n`;
-          } else if (!args.confirmed) {
-            const debtorDebts = debts.filter(d => d.debtor_id === debtor.id);
-            const total = debtorDebts.reduce((sum, d) => sum + Number(d.amount), 0);
-            finalReply = `⚠️ *CONFIRMAÇÃO DE EXCLUSÃO*\n\n👤 *Devedor:* ${debtor.name}\n💰 *Total em Dívidas:* R$ ${total.toFixed(2)}\n📝 *Dívidas:* ${debtorDebts.length}\n\nConfirma a remoção permanente de todos os dados deste devedor? (Responda "Sim" para confirmar)`;
           } else {
             const { error } = await supabase.from('debtors').delete().eq('id', debtor.id).eq('user_id', userId);
             finalReply += error ? `❌ Erro ao deletar: ${error.message}\n` : `🗑️ *${debtor.name}* e suas dívidas foram removidos.\n`;
