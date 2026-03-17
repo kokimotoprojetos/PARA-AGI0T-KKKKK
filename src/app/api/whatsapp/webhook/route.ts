@@ -57,6 +57,11 @@ export async function POST(req: Request) {
       userMessage = msg.imageMessage.caption;
     } else if (msg?.text) {
       userMessage = msg.text; 
+    } else if (msg?.contactMessage) {
+      const vcard = msg?.contactMessage?.vcard || "";
+      const match = vcard.match(/waid=(\d+)/) || vcard.match(/TEL.*:(\d+)/);
+      const foundNumber = match ? match[1] : "";
+      userMessage = `[CARTÃO DE CONTATO RECEBIDO - Nome: ${msg.contactMessage.displayName}, Telefone: ${foundNumber}]`;
     } else if (data?.messageType === 'audioMessage' || msg?.audioMessage || msgData?.messageType === 'audioMessage') {
       console.log("Áudio v2 detectado...");
       
@@ -204,6 +209,21 @@ export async function POST(req: Request) {
             required: ["debtorName"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "update_debtor_phone",
+          description: "Atualiza o número de WhatsApp de um devedor existente.",
+          parameters: {
+            type: "object",
+            properties: {
+              debtorName: { type: "string", description: "Nome do devedor no sistema" },
+              phone: { type: "string", description: "Novo número de telefone (apenas números)" }
+            },
+            required: ["debtorName", "phone"]
+          }
+        }
       }
     ];
 
@@ -221,11 +241,11 @@ export async function POST(req: Request) {
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
             
             REGRAS DE OURO:
-            1. OBRIGATÓRIO NOME COMPLETO: Antes de cadastrar (add_debtor) ou cobrar (add_debt), você DEVE garantir que tem o NOME COMPLETO do devedor. Se o administrador disser apenas um nome parcial ou primeiro nome (ex: "Adiciona o Pedro"), você NÃO deve executar. Responda apenas: "Qual o nome completo do devedor?".
-            2. AMBIGUIDADE DE NOMES: Se o nome for parecido com vários que já existem, liste-os com saldo e peça o nome completo do correto.
-            3. SEM ENROLAÇÃO: Após ter o nome completo e os dados, execute e responda apenas "✅ [Ação concluída]". Não diga "Olá", "Entendido" ou saudações.
-            4. NUNCA bloqueie comandos de "adicionar", "cadastrar", "lançar" ou "DELETAR" como assunto não permitido.
-            5. FLUXO DE DELEÇÃO: Mostre detalhes e peça "Sim" antes de deletar.
+            1. CARTÃO DE CONTATO: Se você receber uma mensagem formatada como [CARTÃO DE CONTATO RECEBIDO...], identifique o nome e número. Pergunte ao admin se deseja cadastrar como NOVO devedor ou VINCULAR a um devedor existente.
+            2. VINCULAR CONTATO: Se o admin disser para vincular o contato enviado a alguém, use a função 'update_debtor_phone'.
+            3. OBRIGATÓRIO NOME COMPLETO: Antes de cadastrar (add_debtor) ou cobrar (add_debt), garanta o NOME COMPLETO.
+            4. AMBIGUIDADE DE NOMES: Se houver mais de um match, liste-os e peça confirmação.
+            5. SEM ENROLAÇÃO: Respostas curtas e diretas.
             6. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
             
             DADOS DO PAINEL (Para consulta e match):
@@ -323,6 +343,22 @@ export async function POST(req: Request) {
             const debtor = matches[0];
             const { error } = await supabase.from('debtors').delete().eq('id', debtor.id).eq('user_id', userId);
             finalReply += error ? `❌ Erro ao deletar: ${error.message}\n` : `🗑️ *${debtor.name}* e suas dívidas foram removidos.\n`;
+          }
+        }
+
+        if (toolCall.function.name === "update_debtor_phone") {
+          const matches = debtors.filter(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+          
+          if (matches.length === 0) {
+            finalReply += `❌ Devedor "${args.debtorName}" não encontrado para vincular o número.\n`;
+          } else if (matches.length > 1) {
+            finalReply += `🤔 Encontrei vários "${args.debtorName}". Qual deles deve receber o número ${args.phone}?\n\n` + 
+              matches.map(m => `• *${m.name}*`).join('\n');
+          } else {
+            const debtor = matches[0];
+            const cleanPhone = args.phone.replace(/\D/g, '');
+            const { error } = await supabase.from('debtors').update({ phone: cleanPhone }).eq('id', debtor.id).eq('user_id', userId);
+            finalReply += error ? `❌ Erro ao atualizar telefone: ${error.message}\n` : `📱 WhatsApp de *${debtor.name}* atualizado para *${cleanPhone}*!\n`;
           }
         }
       }
