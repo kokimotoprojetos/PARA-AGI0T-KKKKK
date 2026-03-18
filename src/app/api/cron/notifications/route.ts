@@ -99,17 +99,32 @@ export async function GET(req: Request) {
         }
 
         if (shouldNotify && message) {
+            // 1. Notificar ADMINISTRADOR (conforme lógica de dias ou hora em hora)
             await sendWhatsApp(profile.notification_number, message);
             
-            // --- NOVIDADE: Cobrança Direta ao Devedor ---
-            // Se hoje é o dia do vencimento, envia mensagem diretamente para o devedor também
-            if (daysRemaining === 0 && debt.debtor.phone) {
-                const debtorMessage = `Olá *${debt.debtor.name}*, informamos que sua dívida no valor de *R$ ${Number(debt.amount).toFixed(2)}* vence hoje.\n\nPor favor, entre em contato para realizar o pagamento através do número: *${profile.notification_number}*.`;
-                await sendWhatsApp(debt.debtor.phone, debtorMessage);
-                console.log(`Cobrança direta enviada para devedor: ${debt.debtor.name}`);
+            // 2. COBRANÇA DIRETA AO DEVEDOR (Automática - Apenas uma vez por dia)
+            if (debt.debtor.phone && !wasNotifiedToday) {
+                let debtorMessage = "";
+                
+                if (daysRemaining === 1) {
+                    // Um dia antes
+                    debtorMessage = `Olá *${debt.debtor.name}*, este é um lembrete de que sua dívida no valor de *R$ ${Number(debt.amount).toFixed(2)}* vence AMANHÃ.\n\nContamos com sua regularização! 🙏`;
+                } else if (daysRemaining === 0) {
+                    // Vence hoje
+                    debtorMessage = `Olá *${debt.debtor.name}*, informamos que sua dívida no valor de *R$ ${Number(debt.amount).toFixed(2)}* vence hoje.\n\nPor favor, entre em contato para combinar o pagamento através deste número ou do pix cadastrado.`;
+                } else if (daysRemaining < 0) {
+                    // Atrasado
+                    const diasAtraso = Math.abs(daysRemaining);
+                    debtorMessage = `Olá *${debt.debtor.name}*, sua dívida de *R$ ${Number(debt.amount).toFixed(2)}* está atrasada há ${diasAtraso} ${diasAtraso === 1 ? 'dia' : 'dias'}.\n\nGentileza regularizar o quanto antes! 🙏`;
+                }
+
+                if (debtorMessage) {
+                    await sendWhatsApp(debt.debtor.phone, debtorMessage);
+                    console.log(`Cobrança direta automática enviada para: ${debt.debtor.name}`);
+                }
             }
 
-            // Atualizar o banco com o horário da última notificação
+            // Atualizar o banco com o horário da última notificação (para evitar loops)
             await supabase
                 .from('debts')
                 .update({ last_notified_at: now.toISOString() })

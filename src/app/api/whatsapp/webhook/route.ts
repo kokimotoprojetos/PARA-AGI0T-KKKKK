@@ -155,6 +155,12 @@ export async function POST(req: Request) {
     - Pendente: R$ ${pendingAmount.toFixed(2)}
     - Recebido: R$ ${paidAmount.toFixed(2)}
     
+    DEVEDORES CADASTRADOS:
+    ${debtors.map(d => {
+      const balance = debts.filter(db => db.debtor_id === d.id && db.status === 'PENDING').reduce((s, b) => s + Number(b.amount), 0);
+      return `- Nome: ${d.name} | Telefone: ${d.phone || 'N/A'} | Saldo Pendente: R$ ${balance.toFixed(2)}`;
+    }).join('\n')}
+
     LISTA DETALHADA DE DÍVIDAS PENDENTES:
     ${pendingDebts.map(d => `- Nome: ${d.debtor?.name}\n  Valor: R$ ${Number(d.amount).toFixed(2)}\n  Vencimento: ${new Date(d.due_date).toLocaleDateString('pt-BR')}\n  Descrição: ${d.description || 'Sem descrição'}`).join('\n')}
     `;
@@ -255,19 +261,20 @@ export async function POST(req: Request) {
         messages: [
           { 
             role: "system", 
-            content: `Você é o AgenteCobrador AI. Sua função é EXECUÇÃO IMEDIATA de comandos financeiros. 
+            content: `Você é o AgenteCobrador AI, especialista financeiro de um SaaS voltado para gestão de empréstimos e cobranças (juros). 
             
-            DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')} (Referência para cálculos).
+            DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
             
             REGRAS DE OURO:
-            1. MEMÓRIA DE CURTO PRAZO: Você agora vê o histórico recente. Se o admin enviou um [CARTÃO DE CONTATO] e na mensagem seguinte deu uma instrução (ex: "ele deve 100"), use os dados do contato anterior para completar a ação.
-            2. FLUXO DE CONTATO + DÍVIDA: Se enviar [CARTÃO DE CONTATO] + valor, peça a data e depois salve. Use o nome/telefone do link.
-            3. VINCULAR CONTATO: Use 'update_debtor_phone' para atrelar um contato recebido a um nome existente.
-            4. OBRIGATÓRIO NOME COMPLETO: Para novos cadastros manuais sem cartão, garanta o nome completo.
-            5. SEM ENROLAÇÃO: Respostas curtas e diretas.
-            6. DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
+            1. CÁLCULO DE JUROS: Você deve responder perguntas sobre rentabilidade e juros. 
+               Ex: "Quanto é o lucro de 1000 a 15%?" -> Calcule 150.00 de lucro, total 1150.00. Explique brevemente o cálculo se solicitado.
+            2. DETECÇÃO DE DUPLICADOS: Se receber um [CARTÃO DE CONTATO], compare o Nome ou Telefone com a lista de 'DEVEDORES CADASTRADOS' no contexto abaixo.
+               - Se já existir, informe: "Encontrei um cadastro para [Nome] com o telefone [Número]. Deseja adicionar uma nova dívida a ele ou criar um cadastro separado?"
+               - NÃO crie um novo devedor automaticamente se houver um match óbvio. Pergunte antes.
+            3. MEMÓRIA DE CURTO PRAZO: Use o histórico para completar dados faltantes.
+            4. SEM ENROLAÇÃO: Seja direto, profissional e focado em lucro e gestão de capital.
             
-            DADOS DO PAINEL (Para consulta e match):
+            DADOS DO PAINEL:
             ${systemContext}` 
           },
           ...history
