@@ -109,24 +109,15 @@ export async function POST(req: Request) {
           const adminMsg = `📋 *NOVA DÍVIDA REGISTRADA (VENCE HOJE)*\n👤 Devedor: *${debtor?.name}*\n💰 Valor: *${formattedAmount}*\n\n⏳ Aguardando confirmação de pagamento. Responda quando for pago para eu atualizar o status.`;
           await sendWhatsApp(profile.notification_number, adminMsg);
 
-          // Marcar como notificado para o Cron não duplicar a notificação do admin
           await supabase
             .from('debts')
             .update({ last_notified_at: now.toISOString() })
             .eq('id', data.id);
 
-        } else if (daysRemaining === 1 && debtor?.phone) {
-          // Vence AMANHÃ → Cobra o devedor + notifica admin
-          const debtorMessage = `Olá *${debtor.name}*, este é um lembrete de que sua dívida no valor de *${formattedAmount}* vence AMANHÃ.\n\nPor favor, entre em contato para regularizar: https://wa.me/${adminPhone} 🙏`;
-          await sendWhatsApp(debtor.phone, debtorMessage);
-
-          const adminMsg = `🔔 *VENCE AMANHÃ:*\n👤 Devedor: *${debtor.name}*\n💰 Valor: *${formattedAmount}*\n\n✅ Lembrete automático já foi enviado ao devedor.`;
+        } else if (daysRemaining === 1) {
+          // Vence AMANHÃ → Apenas notifica o ADMIN, cobrança ao devedor será no dia do pgto
+          const adminMsg = `🔔 *NOVA DÍVIDA REGISTRADA (VENCE AMANHÃ)*\n👤 Devedor: *${debtor?.name}*\n💰 Valor: *${formattedAmount}*\n\n📅 O devedor será cobrado automaticamente amanhã no dia do pagamento.`;
           await sendWhatsApp(profile.notification_number, adminMsg);
-
-          await supabase
-            .from('debts')
-            .update({ last_notified_at: now.toISOString() })
-            .eq('id', data.id);
 
         } else if (daysRemaining < 0 && debtor?.phone) {
           // Já ATRASADA → Cobra o devedor + notifica admin

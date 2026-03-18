@@ -105,21 +105,23 @@ export async function GET(req: Request) {
             await sendWhatsApp(profile.notification_number, message);
             
             // 2. COBRANÇA DIRETA AO DEVEDOR (Automática - Apenas uma vez por dia)
+            // Dívidas curtas (1 dia): só cobra no dia. Dívidas longas (2+ dias): plano completo.
             if (debt.debtor.phone && !wasNotifiedToday) {
                 let debtorMessage = "";
                 const adminPhone = profile.notification_number.replace(/\D/g, '');
                 
-                if (daysRemaining === 1) {
-                    // Um dia antes
-                    debtorMessage = `Olá *${debt.debtor.name}*, este é um lembrete de que sua dívida no valor de *R$ ${Number(debt.amount).toFixed(2)}* vence AMANHÃ.\n\nPor favor, entre em contato com o administrador para regularizar: https://wa.me/${adminPhone} 🙏`;
+                if (daysRemaining === 3 || daysRemaining === 2) {
+                    // Plano de cobrança antecipada (só para dívidas de 2+ dias)
+                    debtorMessage = `Olá *${debt.debtor.name}*, lembrete: sua dívida de *R$ ${Number(debt.amount).toFixed(2)}* vence em ${daysRemaining} dias.\n\nPor favor, se organize para o pagamento. Contato: https://wa.me/${adminPhone} 🙏`;
                 } else if (daysRemaining === 0) {
-                    // Vence hoje
+                    // Vence hoje - COBRA!
                     debtorMessage = `Olá *${debt.debtor.name}*, informamos que sua dívida no valor de *R$ ${Number(debt.amount).toFixed(2)}* vence hoje.\n\nPor favor, realize o pagamento ou entre em contato agora: https://wa.me/${adminPhone}`;
                 } else if (daysRemaining < 0) {
-                    // Atrasado
+                    // Atrasado - COBRA DIARIAMENTE!
                     const diasAtraso = Math.abs(daysRemaining);
                     debtorMessage = `Olá *${debt.debtor.name}*, sua dívida de *R$ ${Number(debt.amount).toFixed(2)}* está atrasada há ${diasAtraso} ${diasAtraso === 1 ? 'dia' : 'dias'}.\n\nEntre em contato urgente para regularizar sua situação: https://wa.me/${adminPhone} 🙏`;
                 }
+                // daysRemaining === 1 → NÃO envia para o devedor (só cobra no dia)
 
                 if (debtorMessage) {
                     await sendWhatsApp(debt.debtor.phone, debtorMessage);
