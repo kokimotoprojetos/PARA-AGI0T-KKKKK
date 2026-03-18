@@ -31,8 +31,10 @@ export async function GET(req: Request) {
 
   try {
     const now = new Date();
-    // Ajuste para o fuso de Brasília (UTC-3) se necessário para cálculos precisos
-    const todayStr = now.toISOString().split('T')[0];
+    // Ajuste para o fuso de Brasília (UTC-3)
+    const brasiliaOffset = -3 * 60; // UTC-3 em minutos
+    const brasiliaTime = new Date(now.getTime() + (brasiliaOffset - now.getTimezoneOffset()) * 60000);
+    const todayStr = brasiliaTime.toISOString().split('T')[0];
     const today = new Date(todayStr + 'T00:00:00');
 
     // 1. Buscar perfis que possuem número de notificação
