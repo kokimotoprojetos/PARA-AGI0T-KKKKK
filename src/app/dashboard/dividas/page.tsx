@@ -25,7 +25,7 @@ export default function DividasPage() {
   const [debtors, setDebtors] = useState<Debtor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
-  const [formData, setFormData] = useState({ amount: '', dueDate: '', description: '', status: 'PENDING', debtorId: '' });
+  const [formData, setFormData] = useState({ amount: '', originalAmount: '', dueDate: '', description: '', status: 'PENDING', debtorId: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -66,7 +66,8 @@ export default function DividasPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          amount: parseFloat(formData.amount)
+          amount: parseFloat(formData.amount),
+          originalAmount: formData.originalAmount ? parseFloat(formData.originalAmount) : parseFloat(formData.amount)
         })
       });
 
@@ -74,7 +75,7 @@ export default function DividasPage() {
       
       toast.success(`Dívida ${isEditing ? 'atualizada' : 'adicionada'} com sucesso!`);
       setIsOpen(false);
-      setFormData({ amount: '', dueDate: '', description: '', status: 'PENDING', debtorId: '' });
+      setFormData({ amount: '', originalAmount: '', dueDate: '', description: '', status: 'PENDING', debtorId: '' });
       setEditingId(null);
       fetchData();
     } catch {
@@ -139,7 +140,8 @@ export default function DividasPage() {
   const openEdit = (debt: Debt) => {
     setFormData({ 
       amount: debt.amount.toString(), 
-      dueDate: debt.dueDate.split('T')[0], 
+      originalAmount: (debt as any).original_amount?.toString() || debt.amount.toString(),
+      dueDate: debt.dueDate ? debt.dueDate.split('T')[0] : (debt as any).due_date?.split('T')[0], 
       description: debt.description || '', 
       status: debt.status, 
       debtorId: debt.debtor.id 
@@ -155,7 +157,7 @@ export default function DividasPage() {
           <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Dívidas</h1>
           <p className="text-slate-400">Controle o que você tem a receber e envie cobranças.</p>
         </div>
-        <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) setEditingId(null); setFormData({amount:'', dueDate:'', description:'', status:'PENDING', debtorId:''}); }}>
+        <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) setEditingId(null); setFormData({amount:'', originalAmount: '', dueDate:'', description:'', status:'PENDING', debtorId:''}); }}>
           <DialogTrigger render={
             <Button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold shadow-lg shadow-emerald-500/20">
               <Plus className="w-4 h-4 mr-2" /> Nova Dívida
@@ -183,13 +185,17 @@ export default function DividasPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amount" className="text-slate-300">Valor (R$)</Label>
-                  <Input id="amount" type="number" step="0.01" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white" required />
+                  <Label htmlFor="originalAmount" className="text-slate-300">Capital Emprestado (R$)</Label>
+                  <Input id="originalAmount" type="number" step="0.01" value={formData.originalAmount} onChange={e => setFormData({...formData, originalAmount: e.target.value})} placeholder="Valor Original" className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dueDate" className="text-slate-300">Vencimento</Label>
-                  <Input id="dueDate" type="date" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white md:block" required style={{ colorScheme: 'dark' }} />
+                  <Label htmlFor="amount" className="text-slate-300">Valor com Juros (R$)</Label>
+                  <Input id="amount" type="number" step="0.01" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="Valor Final" className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white" required />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dueDate" className="text-slate-300">Data de Vencimento</Label>
+                <Input id="dueDate" type="date" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} className="bg-slate-950 border-slate-800 focus-visible:ring-emerald-500 text-white md:block" required style={{ colorScheme: 'dark' }} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-slate-300">Descrição/Motivo</Label>
@@ -250,7 +256,14 @@ export default function DividasPage() {
                     <TableCell className="font-medium text-slate-200 whitespace-nowrap">{debt.debtor.name}</TableCell>
                     <TableCell className="text-slate-400 max-w-[200px] truncate">{debt.description || '-'}</TableCell>
                     <TableCell className="text-slate-400 whitespace-nowrap">{new Date(debt.dueDate).toLocaleDateString('pt-BR')}</TableCell>
-                    <TableCell className="text-emerald-400 font-medium whitespace-nowrap">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(debt.amount)}</TableCell>
+                    <TableCell className="text-emerald-400 font-medium whitespace-nowrap">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(debt.amount)}
+                      {(debt as any).original_amount && Number((debt as any).original_amount) < Number(debt.amount) && (
+                        <div className="text-[10px] text-emerald-500/70 font-bold uppercase">
+                          + {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(debt.amount) - Number((debt as any).original_amount))} lucro
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                         debt.status === 'PAID' ? 'bg-emerald-500/10 text-emerald-500' :

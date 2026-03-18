@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
     const body = await req.json();
-    const { amount, dueDate, description, status, debtorId, debtTypeId } = body;
+    const { amount, originalAmount, dueDate, description, status, debtorId, debtTypeId } = body;
 
     if (!amount || !dueDate || !debtorId) {
       return new NextResponse("Campos obrigatórios ausentes (Valor, Vencimento ou Devedor)", { status: 400 });
@@ -53,6 +53,7 @@ export async function POST(req: Request) {
 
     const insertData: any = {
       amount: parseFloat(amount),
+      original_amount: originalAmount ? parseFloat(originalAmount) : parseFloat(amount),
       due_date: dueDate,
       status: status || 'PENDING',
       debtor_id: debtorId,

@@ -150,10 +150,12 @@ export async function POST(req: Request) {
     const paidAmount = debts.filter(d => d.status === 'PAID').reduce((sum, d) => sum + Number(d.amount), 0);
     
     const systemContext = `
-    DADOS PAINEL:
-    - Devedores: ${debtors.length}
-    - Pendente: R$ ${pendingAmount.toFixed(2)}
-    - Recebido: R$ ${paidAmount.toFixed(2)}
+    DADOS FINANCEIROS GERAIS:
+    - Capital Total Emprestado: ${debts.reduce((sum, d) => sum + Number((d as any).original_amount || d.amount), 0).toFixed(2)}
+    - Lucro Total Estimado: R$ ${debts.reduce((sum, d) => sum + (Number(d.amount) - Number((d as any).original_amount || d.amount)), 0).toFixed(2)}
+    - Lucro Já Realizado: R$ ${debts.filter(d => d.status === 'PAID').reduce((sum, d) => sum + (Number(d.amount) - Number((d as any).original_amount || d.amount)), 0).toFixed(2)}
+    - Total de Devedores: ${debtors.length}
+    - Saldo Pendente: R$ ${pendingAmount.toFixed(2)}
     
     DEVEDORES CADASTRADOS:
     ${debtors.map(d => {
@@ -194,11 +196,12 @@ export async function POST(req: Request) {
             type: "object",
             properties: {
               debtorName: { type: "string", description: "Nome do devedor conforme cadastrado" },
-              amount: { type: "number", description: "Valor da dívida (ex: 150.50)" },
+              totalAmount: { type: "number", description: "Valor final da dívida com juros/acrescimos (ex: 1150.00)" },
+              originalAmount: { type: "number", description: "Valor original emprestado, o capital principal (ex: 1000.00)" },
               dueDate: { type: "string", description: "Data de vencimento no formato YYYY-MM-DD" },
-              description: { type: "string", description: "Breve descrição da dívida" }
+              description: { type: "string", description: "Breve descrição da dívida (ex: Empréstimo de 1000 a 15% de juros)" }
             },
-            required: ["debtorName", "amount", "dueDate"]
+            required: ["debtorName", "totalAmount", "dueDate"]
           }
         }
       },
@@ -262,20 +265,19 @@ export async function POST(req: Request) {
         messages: [
           { 
             role: "system", 
-            content: `Você é o AgenteCobrador AI, especialista financeiro de um SaaS voltado para gestão de empréstimos e cobranças (juros). 
+            content: `Você é o Agente Especialista em Finanças e Cobranças (SaaS AgenteCobrador). 
+            Atue como o braço direito do administrador de empréstimos.
             
             DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}.
             
             REGRAS DE OURO:
-            1. CÁLCULO DE JUROS: Você deve responder perguntas sobre rentabilidade e juros. 
-               Ex: "Quanto é o lucro de 1000 a 15%?" -> Calcule 150.00 de lucro, total 1150.00. Explique brevemente o cálculo se solicitado.
-            2. DETECÇÃO DE DUPLICADOS: Se receber um [CARTÃO DE CONTATO], compare o Nome ou Telefone com a lista de 'DEVEDORES CADASTRADOS' no contexto abaixo.
-               - Se já existir, informe: "Encontrei um cadastro para [Nome] com o telefone [Número]. Deseja adicionar uma nova dívida a ele ou criar um cadastro separado?"
-               - NÃO crie um novo devedor automaticamente se houver um match óbvio. Pergunte antes.
-            3. MEMÓRIA DE CURTO PRAZO: Use o histórico para completar dados faltantes.
-            4. SEM ENROLAÇÃO: Seja direto, profissional e focado em lucro e gestão de capital.
-            
-            DADOS DO PAINEL:
+            1. LANÇAMENTO DE DÍVIDAS: Sempre tente identificar o CAPITAL ORIGINAL (emprestado) e o VALOR FINAL (juros). 
+               Ex: "Emprestei 1000 a 15%" -> originalAmount=1000, totalAmount=1150. Use 'add_debt'.
+            2. FINALIZAR DÍVIDAS: Quando alguém pagar (ex: "Pedro pagou no PIX"), use a ferramenta 'mark_debt_as_paid'. 
+            3. CONSULTAS FINANCEIRAS: Use os DADOS DO PAINEL abaixo para responder sobre lucro, capital total, inadimplência e quem deve mais.
+            4. COBRANÇA: Use 'collect_debt' para enviar WhatsApp de lembrete/cobrança ao devedor.
+            5. MEMÓRIA: Use o histórico recente para completar dados faltantes (ex: se o admin mandou um contato agora e depois um valor, associe os dois).
+
             ${systemContext}` 
           },
           ...history
@@ -342,15 +344,26 @@ export async function POST(req: Request) {
               `\n\nPor favor, digite o nome completo para lançar a dívida.`;
           } else {
             const debtor = matches[0];
+            const finalAmount = Number(args.totalAmount);
+            const originalAmount = args.originalAmount ? Number(args.originalAmount) : finalAmount;
+            
             const { error } = await supabase.from('debts').insert([{
-              amount: args.amount,
+              amount: finalAmount,
+              original_amount: originalAmount,
               due_date: args.dueDate,
               description: args.description || "",
               debtor_id: debtor.id,
               user_id: userId,
               status: 'PENDING'
             }]);
-            finalReply += error ? `❌ Erro ao lançar dívida: ${error.message}\n` : `✅ Dívida de *R$ ${args.amount}* lançada para *${debtor.name}* (Vencimento: ${new Date(args.dueDate).toLocaleDateString('pt-BR')})!\n`;
+            
+            if (error) {
+                finalReply += `❌ Erro ao lançar dívida: ${error.message}\n`;
+            } else {
+                const lucro = finalAmount - originalAmount;
+                const lucroMsg = lucro > 0 ? ` (Lucro: R$ ${lucro.toFixed(2)})` : "";
+                finalReply += `✅ Dívida de *R$ ${finalAmount.toFixed(2)}* lançada para *${debtor.name}*!\n📅 Vencimento: ${new Date(args.dueDate).toLocaleDateString('pt-BR')}${lucroMsg}\n`;
+            }
           }
         }
 
