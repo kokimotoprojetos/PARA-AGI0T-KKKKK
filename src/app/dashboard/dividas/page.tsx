@@ -17,6 +17,7 @@ type Debt = {
   description: string | null;
   status: string;
   debtor: Debtor;
+  payment_method?: string;
 };
 
 export default function DividasPage() {
@@ -258,6 +259,11 @@ export default function DividasPage() {
                       }`}>
                         {debt.status === 'PAID' ? 'Paga' : debt.status === 'OVERDUE' ? 'Atrasada' : 'Pendente'}
                       </span>
+                      {debt.status === 'PAID' && debt.payment_method && (
+                        <span className="ml-2 text-[10px] text-slate-500 uppercase font-mono">
+                          ({debt.payment_method})
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       {debt.status !== 'PAID' && (

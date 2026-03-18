@@ -234,14 +234,15 @@ export async function POST(req: Request) {
       {
         type: "function",
         function: {
-          name: "collect_debt",
-          description: "Envia uma mensagem de cobrança automática via WhatsApp diretamente para o devedor.",
+          name: "mark_debt_as_paid",
+          description: "Marca uma dívida como paga no sistema, alterando o status para 'PAID' e registrando o método de pagamento.",
           parameters: {
             type: "object",
             properties: {
-              debtorName: { type: "string", description: "Nome do devedor para quem a cobrança será enviada" }
+              debtorName: { type: "string", description: "Nome do devedor que realizou o pagamento" },
+              paymentMethod: { type: "string", description: "Método de pagamento (ex: PIX, Crédito, Débito, Dinheiro, Transferência)" }
             },
-            required: ["debtorName"]
+            required: ["debtorName", "paymentMethod"]
           }
         }
       }
@@ -394,7 +395,7 @@ export async function POST(req: Request) {
           if (matches.length === 0) {
             finalReply += `❌ Devedor "${args.debtorName}" não encontrado para cobrança.\n`;
           } else if (matches.length > 1) {
-            finalReply += `🤔 Encontrei vários "${args.debtorName}". Quem você quer cobrar?\n\n` + 
+            finalReply += `🤔 Encontrei vários "${args.debtorName}". Quem você quer cobrar?\n\n` +
               matches.map(m => `• *${m.name}*`).join('\n');
           } else {
             const debtor = matches[0];
@@ -404,7 +405,7 @@ export async function POST(req: Request) {
               const debtorDebts = debts.filter(d => d.debtor_id === debtor.id && d.status === 'PENDING');
               const total = debtorDebts.reduce((sum, d) => sum + Number(d.amount), 0);
               const messageText = `Olá ${debtor.name}, estamos entrando em contato para lembrar de sua(s) pendência(s) no total de *R$ ${total.toFixed(2)}*. Por favor, entre em contato para regularizar.`;
-              
+
               const res = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "apikey": evolutionKey as string },
@@ -414,6 +415,45 @@ export async function POST(req: Request) {
               finalReply += res.ok ? `📩 Mensagem de cobrança enviada para *${debtor.name}*!\n` : `❌ Falha ao enviar cobrança para ${debtor.name}.\n`;
             }
           }
+        }
+
+        if (toolCall.function.name === "mark_debt_as_paid") {
+            const matches = debtors.filter(d => d.name.toLowerCase().includes(args.debtorName.toLowerCase()));
+            
+            if (matches.length === 0) {
+                finalReply += `❌ Devedor "${args.debtorName}" não encontrado para finalizar dívida.\n`;
+            } else if (matches.length > 1) {
+                finalReply += `🤔 Encontrei vários "${args.debtorName}". De qual você está falando?\n\n` + 
+                    matches.map(m => `• *${m.name}*`).join('\n');
+            } else {
+                const debtor = matches[0];
+                // Buscar a dívida pendente mais recente deste devedor
+                const { data: debtorDebts } = await supabase
+                    .from('debts')
+                    .select('*')
+                    .eq('debtor_id', debtor.id)
+                    .eq('status', 'PENDING')
+                    .order('due_date', { ascending: true });
+
+                if (!debtorDebts || debtorDebts.length === 0) {
+                    finalReply += `⚠️ O devedor *${debtor.name}* não possui dívidas pendentes no momento.\n`;
+                } else {
+                    const debtToPay = debtorDebts[0]; // Pega a que vence primeiro
+                    const { error } = await supabase
+                        .from('debts')
+                        .update({ 
+                            status: 'PAID', 
+                            payment_method: args.paymentMethod.toUpperCase() 
+                        })
+                        .eq('id', debtToPay.id);
+
+                    if (error) {
+                        finalReply += `❌ Erro ao atualizar dívida de *${debtor.name}*: ${error.message}\n`;
+                    } else {
+                        finalReply += `✅ *DÍVIDA FINALIZADA!*\n👤 Devedor: *${debtor.name}*\n💰 Valor: *R$ ${Number(debtToPay.amount).toFixed(2)}*\n💳 Método: *${args.paymentMethod.toUpperCase()}*\n\nO status foi atualizado para PAGO no sistema.`;
+                    }
+                }
+            }
         }
       }
     } else {
